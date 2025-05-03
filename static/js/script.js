@@ -14,6 +14,14 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Current phase
     let currentPhase = 1;
+    let shouldAutoScroll = true;
+
+    // Add scroll event listener to detect user scrolling
+    chatMessages.addEventListener('scroll', function () {
+        // If user has scrolled up, disable auto-scroll
+        const isScrolledToBottom = chatMessages.scrollHeight - chatMessages.clientHeight <= chatMessages.scrollTop + 1;
+        shouldAutoScroll = isScrolledToBottom;
+    });
 
     // Send message when Enter key is pressed (without Shift)
     userInput.addEventListener('keydown', function (e) {
@@ -31,6 +39,9 @@ document.addEventListener('DOMContentLoaded', function () {
         const message = userInput.value.trim();
         if (!message) return;
 
+        // Enable auto-scroll when user sends a message
+        shouldAutoScroll = true;
+
         // Add user message to chat
         addMessageToChat('user', message);
 
@@ -40,6 +51,9 @@ document.addEventListener('DOMContentLoaded', function () {
         // Disable input while waiting for response
         userInput.disabled = true;
         sendButton.disabled = true;
+
+        // Add generating indicator
+        const generatingMessageId = addGeneratingIndicator();
 
         // Check for phase transition messages and show loading if needed
         if (message.toLowerCase() === "appearance design completed" ||
@@ -63,9 +77,12 @@ document.addEventListener('DOMContentLoaded', function () {
                 // Hide loading indicator
                 loadingContainer.style.display = 'none';
 
+                // Remove generating indicator
+                removeGeneratingIndicator(generatingMessageId);
+
                 // Add assistant response to chat
                 if (data.response) {
-                    addMessageToChat('assistant', data.response);
+                    addMessageToChat('assistant', data.response, true); // Add with animation
                 }
 
                 // Update phase if changed
@@ -84,6 +101,9 @@ document.addEventListener('DOMContentLoaded', function () {
 
                     // Show appearance summary container
                     appearanceSummaryContainer.style.display = 'block';
+                    void appearanceSummaryContainer.offsetWidth; // Trigger reflow
+                    appearanceSummaryContainer.classList.add('fade-in');
+                    appearanceSummaryContainer.classList.remove('fade-out');
                 }
 
                 if (data.commercial_summary) {
@@ -95,6 +115,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
                     // Fade out appearance summary
                     appearanceSummaryContainer.classList.add('fade-out');
+                    appearanceSummaryContainer.classList.remove('fade-in');
                     setTimeout(() => {
                         appearanceSummaryContainer.style.display = 'none';
                         commercialSummaryContainer.style.display = 'block';
@@ -104,6 +125,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
                         // Fade in commercial summary
                         commercialSummaryContainer.classList.add('fade-in');
+                        commercialSummaryContainer.classList.remove('fade-out');
                     }, 800);
                 }
 
@@ -116,6 +138,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
                     // Fade out commercial summary
                     commercialSummaryContainer.classList.add('fade-out');
+                    commercialSummaryContainer.classList.remove('fade-in');
 
                     // Wait for fade out to complete, then show product introduction
                     setTimeout(() => {
@@ -127,6 +150,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
                         // Fade in product introduction
                         productIntroContainer.classList.add('fade-in');
+                        productIntroContainer.classList.remove('fade-out');
                     }, 800);
                 }
 
@@ -140,6 +164,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
                 // Hide loading indicator
                 loadingContainer.style.display = 'none';
+                // Remove generating indicator
+                removeGeneratingIndicator(generatingMessageId);
 
                 addMessageToChat('assistant', 'Sorry, there was an error processing your request. Please try again.');
 
@@ -150,11 +176,43 @@ document.addEventListener('DOMContentLoaded', function () {
             });
     }
 
+    // Function to add a temporary generating message
+    function addGeneratingIndicator() {
+        const messageId = `generating-${Date.now()}`;
+        const messageDiv = document.createElement('div');
+        messageDiv.id = messageId;
+        messageDiv.className = 'message assistant generating';
+
+        const contentDiv = document.createElement('div');
+        contentDiv.className = 'message-content';
+        contentDiv.textContent = 'Generating...';
+
+        messageDiv.appendChild(contentDiv);
+        chatMessages.appendChild(messageDiv);
+
+        // Only scroll if we're already at the bottom
+        if (shouldAutoScroll) {
+            scrollToBottom();
+        }
+        return messageId;
+    }
+
+    // Function to remove the generating message
+    function removeGeneratingIndicator(messageId) {
+        const generatingMessage = document.getElementById(messageId);
+        if (generatingMessage) {
+            generatingMessage.remove();
+        }
+    }
+
     // Function to add message to chat
-    function addMessageToChat(sender, content) {
+    function addMessageToChat(sender, content, animate = false) {
         // Create message container
         const messageDiv = document.createElement('div');
         messageDiv.className = `message ${sender}`;
+        if (animate) {
+            messageDiv.classList.add('new-message');
+        }
 
         // Create message content
         const contentDiv = document.createElement('div');
@@ -177,7 +235,21 @@ document.addEventListener('DOMContentLoaded', function () {
         // Add message to chat
         chatMessages.appendChild(messageDiv);
 
-        // Scroll to bottom
+        // Only scroll if it's a user message or we're already at the bottom
+        if (sender === 'user' || shouldAutoScroll) {
+            scrollToBottom();
+        }
+
+        // Trigger animation if requested
+        if (animate) {
+            // Force reflow to ensure animation runs
+            void messageDiv.offsetWidth;
+            messageDiv.classList.remove('new-message');
+        }
+    }
+
+    // Function to scroll chat to bottom
+    function scrollToBottom() {
         chatMessages.scrollTop = chatMessages.scrollHeight;
     }
 

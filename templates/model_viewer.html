@@ -153,6 +153,26 @@
             z-index: 100;
             color: white;
         }
+        #menu.collapsed {
+            right: -215px; /* Width (200px) + padding (15px) - slight overlap */
+        }
+        #toggle-menu-btn {
+            position: absolute;
+            left: -30px; /* Position button outside the menu */
+            top: 10px;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            border: none;
+            border-radius: 5px 0 0 5px; /* Round left corners */
+            padding: 10px 5px;
+            cursor: pointer;
+            font-size: 16px;
+            z-index: 99; /* Below menu */
+            transition: background-color 0.2s;
+        }
+        #toggle-menu-btn:hover {
+            background-color: rgba(50, 50, 50, 0.8);
+        }
     </style>
 </head>
 <body>
@@ -167,6 +187,7 @@
         <div id="progress-text">0%</div>
     </div>
     <div id="menu">
+        <button id="toggle-menu-btn">&lt;</button>
         <h3>Model Controls</h3>
         <div class="control-group">
             <div class="view-buttons">
@@ -207,6 +228,8 @@
             <input type="range" id="rotation-speed" min="0" max="5" step="0.5" value="2">
         </div>
         
+        <!-- Remove the background color dropdown -->
+        <!--
         <div class="control-group">
             <label class="control-label">Background:</label>
             <select id="background-color">
@@ -217,6 +240,7 @@
                 <option value="0x27ae60">Green</option>
             </select>
         </div>
+        -->
         
         <div class="control-group">
             <label>
@@ -252,309 +276,365 @@
         const modelName = modelNameParts[modelNameParts.length - 1];
         document.getElementById('model-name').textContent = `Viewing: ${modelName}`;
 
-        // Set up the scene, camera, and renderer
-        const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x1a1a1a);  // Dark background
-        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.position.set(0, 5, 10);
+        let controls, scene, camera, renderer, model;
+        let defaultCameraPosition = new THREE.Vector3();
+        let defaultTargetPosition = new THREE.Vector3();
+        let defaultModelPosition = new THREE.Vector3();
+        let defaultModelRotation = new THREE.Euler();
+        let defaultModelScale = new THREE.Vector3();
+        let initialZoom;
 
-        // Background color control
-        const backgroundSelector = document.getElementById('background-color');
-        backgroundSelector.addEventListener('change', function() {
-            scene.background = new THREE.Color(parseInt(this.value));
-        });
-
-        const renderer = new THREE.WebGLRenderer({ antialias: true });
-        renderer.setPixelRatio(window.devicePixelRatio);
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.toneMapping = THREE.ACESFilmicToneMapping;
-        renderer.toneMappingExposure = 1;
-        renderer.outputColorSpace = THREE.SRGBColorSpace;
-        document.getElementById('scene-container').appendChild(renderer.domElement);
-
-        // Set up environment lighting
-        const pmremGenerator = new THREE.PMREMGenerator(renderer);
-        const environment = pmremGenerator.fromScene(new RoomEnvironment()).texture;
-        scene.environment = environment;
-        
-        // Add ambient light
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
-        scene.add(ambientLight);
-        
-        // Add directional light
-        const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
-        directionalLight.position.set(5, 10, 7.5);
-        scene.add(directionalLight);
-
-        // Set up controls
-        const controls = new OrbitControls(camera, renderer.domElement);
-        controls.enableDamping = true;
-        controls.dampingFactor = 0.05;
-        controls.screenSpacePanning = true;
-        controls.minDistance = 1;
-        controls.maxDistance = 50;
-        controls.maxPolarAngle = Math.PI;
-        controls.minPolarAngle = 0;
-        
-        // Auto-rotation control
+        // UI Elements
+        const loadingDiv = document.getElementById('loading');
+        const progressBar = document.getElementById('progress');
+        const progressText = document.getElementById('progress-text');
         const autoRotateCheckbox = document.getElementById('autoRotate');
-        autoRotateCheckbox.addEventListener('change', function() {
-            controls.autoRotate = this.checked;
-        });
-        
-        // Set rotation speed
+        const wireframeCheckbox = document.getElementById('wireframe');
+        // const backgroundColorSelect = document.getElementById('background-color'); // Remove reference
+        const scaleSlider = document.getElementById('scale');
+        const scaleValueSpan = document.getElementById('scale-value');
+        const positionYSlider = document.getElementById('position-y');
+        const positionYValueSpan = document.getElementById('position-y-value');
         const rotationSpeedSlider = document.getElementById('rotation-speed');
-        rotationSpeedSlider.addEventListener('input', function() {
-            controls.autoRotateSpeed = parseFloat(this.value);
-        });
-        controls.autoRotateSpeed = parseFloat(rotationSpeedSlider.value);
 
-        // Set up model loader
-        const dracoLoader = new DRACOLoader();
-        dracoLoader.setDecoderPath(`${THREE_PATH}/examples/jsm/libs/draco/gltf/`);
-        
-        const loader = new GLTFLoader();
-        loader.setDRACOLoader(dracoLoader);
+        init();
+        animate();
 
-        // Load the model
-        let mixer;
-        let model; // Store the model reference
-        
-        loader.load(
-            modelPath,
-            function (gltf) {
-                document.getElementById('loading').style.display = 'none';
-                
-                model = gltf.scene;
-                
-                // Center the model
-                const box = new THREE.Box3().setFromObject(model);
-                const center = box.getCenter(new THREE.Vector3());
-                const size = box.getSize(new THREE.Vector3());
-                const maxDim = Math.max(size.x, size.y, size.z);
-                const fov = camera.fov * (Math.PI / 180);
-                let cameraZ = Math.abs(maxDim / Math.sin(fov / 2));
-                
-                // Store original position for view controls
-                const originalCameraPos = {
-                    front: new THREE.Vector3(center.x, center.y, center.z + cameraZ * 1.5),
-                    back: new THREE.Vector3(center.x, center.y, center.z - cameraZ * 1.5),
-                    left: new THREE.Vector3(center.x - cameraZ * 1.5, center.y, center.z),
-                    right: new THREE.Vector3(center.x + cameraZ * 1.5, center.y, center.z),
-                    top: new THREE.Vector3(center.x, center.y + cameraZ * 1.5, center.z),
-                    bottom: new THREE.Vector3(center.x, center.y - cameraZ * 1.5, center.z)
-                };
-                
-                // Position camera to see all of the model - start with front view
-                camera.position.copy(originalCameraPos.front);
-                camera.position.y += maxDim * 0.1; // Slight elevation for better viewing
-                controls.target.copy(center);
-                
-                // Store initial position for reset
-                const initialCameraPosition = camera.position.clone();
-                const initialTarget = center.clone();
-                
-                // Reset camera after centering
-                camera.lookAt(center);
-                controls.update();
-                
-                // Reset camera button
-                document.getElementById('reset-camera').addEventListener('click', function() {
-                    cameraMove(initialCameraPosition, initialTarget);
+        function init() {
+            const container = document.getElementById('scene-container');
+
+            // Renderer setup for transparency
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true }); // Set alpha: true
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setClearColor(0x000000, 0); // Set clear color to transparent
+            renderer.toneMapping = THREE.ACESFilmicToneMapping;
+            renderer.toneMappingExposure = 1;
+            container.appendChild(renderer.domElement);
+
+            // Scene and environment
+            scene = new THREE.Scene();
+            // scene.background = new THREE.Color(0x1a1a1a); // Remove default background color
+            const environment = new RoomEnvironment(renderer);
+            const pmremGenerator = new THREE.PMREMGenerator(renderer);
+            scene.environment = pmremGenerator.fromScene(environment).texture;
+            environment.dispose();
+
+            // Camera
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 5, 10);
+
+            // Add ambient light
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+            scene.add(ambientLight);
+            
+            // Add directional light
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+            directionalLight.position.set(5, 10, 7.5);
+            scene.add(directionalLight);
+
+            // Set up controls
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.screenSpacePanning = true;
+            controls.minDistance = 1;
+            controls.maxDistance = 50;
+            controls.maxPolarAngle = Math.PI;
+            controls.minPolarAngle = 0;
+            
+            // Auto-rotation control
+            autoRotateCheckbox.addEventListener('change', function() {
+                controls.autoRotate = this.checked;
+            });
+            
+            // Set rotation speed
+            rotationSpeedSlider.addEventListener('input', function() {
+                controls.autoRotateSpeed = parseFloat(this.value);
+            });
+            controls.autoRotateSpeed = parseFloat(rotationSpeedSlider.value);
+
+            // Set up model loader
+            const dracoLoader = new DRACOLoader();
+            dracoLoader.setDecoderPath(`${THREE_PATH}/examples/jsm/libs/draco/gltf/`);
+            
+            const loader = new GLTFLoader();
+            loader.setDRACOLoader(dracoLoader);
+
+            // Load the model
+            let mixer;
+            loader.load(
+                modelPath,
+                function (gltf) {
+                    model = gltf.scene;
                     
-                    // Reset model orientation too
-                    model.rotation.set(0, 0, 0);
-                });
-                
-                // Check if model needs auto-orientation
-                // Some models load with wrong orientation, try to fix
-                if (size.y > size.x * 1.5 && size.y > size.z * 1.5) {
-                    // Model is likely oriented vertically when it should be horizontal
-                    model.rotation.x = -Math.PI / 2;
-                }
-                
-                // View control buttons
-                document.getElementById('view-front').addEventListener('click', function() {
-                    cameraMove(originalCameraPos.front, center);
-                });
-                
-                document.getElementById('view-back').addEventListener('click', function() {
-                    cameraMove(originalCameraPos.back, center);
-                });
-                
-                document.getElementById('view-left').addEventListener('click', function() {
-                    cameraMove(originalCameraPos.left, center);
-                });
-                
-                document.getElementById('view-right').addEventListener('click', function() {
-                    cameraMove(originalCameraPos.right, center);
-                });
-                
-                document.getElementById('view-top').addEventListener('click', function() {
-                    cameraMove(originalCameraPos.top, center);
-                });
-                
-                document.getElementById('view-bottom').addEventListener('click', function() {
-                    cameraMove(originalCameraPos.bottom, center);
-                });
-                
-                // Model rotation controls
-                const rotationStep = Math.PI / 12; // 15 degrees
-                
-                document.getElementById('rotate-x-plus').addEventListener('click', function() {
-                    model.rotation.x += rotationStep;
-                });
-                
-                document.getElementById('rotate-x-minus').addEventListener('click', function() {
-                    model.rotation.x -= rotationStep;
-                });
-                
-                document.getElementById('rotate-y-plus').addEventListener('click', function() {
-                    model.rotation.y += rotationStep;
-                });
-                
-                document.getElementById('rotate-y-minus').addEventListener('click', function() {
-                    model.rotation.y -= rotationStep;
-                });
-                
-                document.getElementById('rotate-z-plus').addEventListener('click', function() {
-                    model.rotation.z += rotationStep;
-                });
-                
-                document.getElementById('rotate-z-minus').addEventListener('click', function() {
-                    model.rotation.z -= rotationStep;
-                });
-                
-                // Function to smoothly move camera
-                function cameraMove(targetPos, lookAt) {
-                    const duration = 1.0;
-                    const currentPos = camera.position.clone();
-                    const currentTarget = controls.target.clone();
+                    // Calculate bounding box and center the model
+                    const box = new THREE.Box3().setFromObject(model);
+                    const size = box.getSize(new THREE.Vector3()).length();
+                    const center = box.getCenter(new THREE.Vector3());
+
+                    model.position.x += (model.position.x - center.x);
+                    model.position.y += (model.position.y - center.y);
+                    model.position.z += (model.position.z - center.z);
+
+                    // Scale model to fit nicely
+                    camera.position.copy(center);
+                    camera.position.x += size / 2.0;
+                    camera.position.y += size / 5.0;
+                    camera.position.z += size / 2.0;
+                    camera.lookAt(center);
                     
-                    // Animation steps
-                    let progress = 0;
-                    const interval = setInterval(() => {
-                        progress += 0.02;
-                        if (progress >= 1) {
-                            clearInterval(interval);
-                            camera.position.copy(targetPos);
-                            controls.target.copy(lookAt);
-                            camera.lookAt(lookAt);
-                            controls.update();
-                            return;
-                        }
-                        
-                        // Interpolate positions
-                        camera.position.lerpVectors(currentPos, targetPos, progress);
-                        const newTarget = new THREE.Vector3().lerpVectors(currentTarget, lookAt, progress);
-                        controls.target.copy(newTarget);
-                        camera.lookAt(newTarget);
-                        controls.update();
-                    }, 20);
-                }
-                
-                // Scale control
-                const scaleSlider = document.getElementById('scale');
-                const scaleValue = document.getElementById('scale-value');
-                
-                scaleSlider.addEventListener('input', function() {
-                    const scale = parseFloat(this.value);
-                    model.scale.set(scale, scale, scale);
-                    scaleValue.textContent = scale.toFixed(1);
-                });
-                
-                // Position Y control
-                const positionYSlider = document.getElementById('position-y');
-                const positionYValue = document.getElementById('position-y-value');
-                const originalY = model.position.y;
-                
-                positionYSlider.addEventListener('input', function() {
-                    const posY = parseFloat(this.value);
-                    model.position.y = originalY + posY;
-                    positionYValue.textContent = posY.toFixed(1);
-                });
-                
-                // Reset model button
-                const resetButton = document.getElementById('reset-model');
-                resetButton.addEventListener('click', function() {
-                    // Reset scale
-                    model.scale.set(1, 1, 1);
-                    scaleSlider.value = 1;
-                    scaleValue.textContent = '1.0';
-                    
-                    // Reset position Y
-                    model.position.y = originalY;
-                    positionYSlider.value = 0;
-                    positionYValue.textContent = '0.0';
-                    
-                    // Reset rotation
-                    model.rotation.set(0, 0, 0);
-                    
-                    // Reset wireframe
-                    const wireframeCheckbox = document.getElementById('wireframe');
+                    // Save initial state
+                    defaultCameraPosition.copy(camera.position);
+                    defaultTargetPosition.copy(controls.target);
+                    defaultModelPosition.copy(model.position);
+                    defaultModelRotation.copy(model.rotation);
+                    defaultModelScale.copy(model.scale);
+                    initialZoom = camera.zoom; // Assuming perspective camera zoom is not used like this, maybe controls.target distance?
+
+                    scene.add(model);
+
+                    // Hide loading indicator
+                    loadingDiv.style.display = 'none';
+
+                    // Apply default controls state
+                    autoRotateCheckbox.checked = false;
                     wireframeCheckbox.checked = false;
-                    model.traverse(function(child) {
-                        if (child.isMesh) {
-                            child.material.wireframe = false;
-                        }
-                    });
-                });
-                
-                // Wireframe control
-                const wireframeCheckbox = document.getElementById('wireframe');
-                wireframeCheckbox.addEventListener('change', function() {
-                    model.traverse(function(child) {
-                        if (child.isMesh) {
-                            child.material.wireframe = wireframeCheckbox.checked;
-                        }
-                    });
-                });
-                
-                // Handle animations if they exist
-                if (gltf.animations && gltf.animations.length) {
-                    mixer = new THREE.AnimationMixer(model);
-                    const action = mixer.clipAction(gltf.animations[0]);
-                    action.play();
+                    // backgroundColorSelect.value = '0x1a1a1a'; // Remove background control
+                    scaleSlider.value = 1;
+                    scaleValueSpan.textContent = '1.0';
+                    positionYSlider.value = 0;
+                    positionYValueSpan.textContent = '0.0';
+                    rotationSpeedSlider.value = 2;
+                    
+                    // Reset controls target to the model's center after loading
+                    controls.target.copy(center);
+                    controls.update(); // Ensure controls reflect the new target
+
+                    // Handle animations if they exist
+                    if (gltf.animations && gltf.animations.length) {
+                        mixer = new THREE.AnimationMixer(model);
+                        const action = mixer.clipAction(gltf.animations[0]);
+                        action.play();
+                    }
+                },
+                function (xhr) {
+                    if (xhr.lengthComputable) {
+                        const percentComplete = xhr.loaded / xhr.total * 100;
+                        document.getElementById('progress').style.width = percentComplete + '%';
+                        document.getElementById('progress-text').textContent = Math.round(percentComplete) + '%';
+                    }
+                },
+                function (error) {
+                    document.getElementById('loading').innerHTML = '<div style="color: red;">Error loading model</div>';
+                    console.error('An error happened', error);
                 }
-                
-                scene.add(model);
-            },
-            function (xhr) {
-                if (xhr.lengthComputable) {
-                    const percentComplete = xhr.loaded / xhr.total * 100;
-                    document.getElementById('progress').style.width = percentComplete + '%';
-                    document.getElementById('progress-text').textContent = Math.round(percentComplete) + '%';
+            );
+
+            // Setup controls
+            setupControls();
+
+            window.addEventListener('resize', onWindowResize);
+        }
+
+        function setupControls() {
+            // Auto-rotate
+            autoRotateCheckbox.addEventListener('change', (event) => {
+                controls.autoRotate = event.target.checked;
+            });
+
+            // Wireframe
+            wireframeCheckbox.addEventListener('change', (event) => {
+                const isWireframe = event.target.checked;
+                model.traverse((child) => {
+                    if (child.isMesh) {
+                        child.material.wireframe = isWireframe;
+                    }
+                });
+            });
+
+            // Background color - REMOVED
+            // backgroundColorSelect.addEventListener('change', (event) => {
+            //     scene.background = new THREE.Color(parseInt(event.target.value));
+            // });
+
+            // Scale
+            scaleSlider.addEventListener('input', (event) => {
+                const scale = parseFloat(event.target.value);
+                model.scale.set(scale, scale, scale);
+                scaleValueSpan.textContent = scale.toFixed(1);
+            });
+
+            // Position Y
+            positionYSlider.addEventListener('input', (event) => {
+                const posY = parseFloat(event.target.value);
+                model.position.y = defaultModelPosition.y + posY;
+                positionYValueSpan.textContent = posY.toFixed(1);
+            });
+
+            // Rotation Speed
+            rotationSpeedSlider.addEventListener('input', (event) => {
+                controls.autoRotateSpeed = parseFloat(event.target.value);
+            });
+
+            // Reset Model
+            document.getElementById('reset-model').addEventListener('click', () => {
+                camera.position.copy(defaultCameraPosition);
+                controls.target.copy(defaultTargetPosition);
+                model.position.copy(defaultModelPosition);
+                model.rotation.copy(defaultModelRotation);
+                model.scale.copy(defaultModelScale);
+                camera.zoom = initialZoom;
+                controls.update();
+
+                autoRotateCheckbox.checked = false;
+                wireframeCheckbox.checked = false;
+                scaleSlider.value = 1;
+                scaleValueSpan.textContent = '1.0';
+                positionYSlider.value = 0;
+                positionYValueSpan.textContent = '0.0';
+                rotationSpeedSlider.value = 2;
+
+                model.traverse((child) => {
+                    if (child.isMesh) {
+                        child.material.wireframe = false;
+                    }
+                });
+            });
+
+            // Model Rotation
+            const rotationStep = Math.PI / 12; // 15 degrees
+
+            document.getElementById('rotate-x-plus').addEventListener('click', function() {
+                model.rotation.x += rotationStep;
+            });
+
+            document.getElementById('rotate-x-minus').addEventListener('click', function() {
+                model.rotation.x -= rotationStep;
+            });
+
+            document.getElementById('rotate-y-plus').addEventListener('click', function() {
+                model.rotation.y += rotationStep;
+            });
+
+            document.getElementById('rotate-y-minus').addEventListener('click', function() {
+                model.rotation.y -= rotationStep;
+            });
+
+            document.getElementById('rotate-z-plus').addEventListener('click', function() {
+                model.rotation.z += rotationStep;
+            });
+
+            document.getElementById('rotate-z-minus').addEventListener('click', function() {
+                model.rotation.z -= rotationStep;
+            });
+
+            // Menu Toggle Button
+            const menu = document.getElementById('menu');
+            const toggleBtn = document.getElementById('toggle-menu-btn');
+            toggleBtn.addEventListener('click', () => {
+                menu.classList.toggle('collapsed');
+                // Change button text based on state
+                if (menu.classList.contains('collapsed')) {
+                    toggleBtn.textContent = '>';
+                } else {
+                    toggleBtn.textContent = '<';
                 }
-            },
-            function (error) {
-                document.getElementById('loading').innerHTML = '<div style="color: red;">Error loading model</div>';
-                console.error('An error happened', error);
-            }
-        );
+            });
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update(); // Required if controls.enableDamping or controls.autoRotate are set
+            renderer.render(scene, camera);
+        }
+
+        // Button handlers
+        document.getElementById('view-front').addEventListener('click', () => setView('front'));
+        document.getElementById('view-back').addEventListener('click', () => setView('back'));
+        document.getElementById('view-left').addEventListener('click', () => setView('left'));
+        document.getElementById('view-right').addEventListener('click', () => setView('right'));
+        document.getElementById('view-top').addEventListener('click', () => setView('top'));
+        document.getElementById('view-bottom').addEventListener('click', () => setView('bottom'));
+        document.getElementById('reset-camera').addEventListener('click', () => resetCamera());
 
         // Handle window resizing
-        window.addEventListener('resize', onWindowResize);
         function onWindowResize() {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
         }
 
-        // Animation loop
-        const clock = new THREE.Clock();
-        function animate() {
-            requestAnimationFrame(animate);
+        // Function to smoothly move camera
+        function cameraMove(targetPos, lookAt) {
+            const duration = 1.0;
+            const currentPos = camera.position.clone();
+            const currentTarget = controls.target.clone();
             
-            controls.update();
-            
-            if (mixer) {
-                mixer.update(clock.getDelta());
-            }
-            
-            renderer.render(scene, camera);
+            // Animation steps
+            let progress = 0;
+            const interval = setInterval(() => {
+                progress += 0.02;
+                if (progress >= 1) {
+                    clearInterval(interval);
+                    camera.position.copy(targetPos);
+                    controls.target.copy(lookAt);
+                    camera.lookAt(lookAt);
+                    controls.update();
+                    return;
+                }
+                
+                // Interpolate positions
+                camera.position.lerpVectors(currentPos, targetPos, progress);
+                const newTarget = new THREE.Vector3().lerpVectors(currentTarget, lookAt, progress);
+                controls.target.copy(newTarget);
+                camera.lookAt(newTarget);
+                controls.update();
+            }, 20);
         }
-        
-        animate();
+
+        // View control buttons
+        function setView(view) {
+            const box = new THREE.Box3().setFromObject(model);
+            const size = box.getSize(new THREE.Vector3());
+            const center = box.getCenter(new THREE.Vector3());
+            const maxDim = Math.max(size.x, size.y, size.z);
+            const fov = camera.fov * (Math.PI / 180);
+            let cameraZ = Math.abs(maxDim / Math.sin(fov / 2));
+
+            let targetPos, lookAt;
+            switch (view) {
+                case 'front':
+                    targetPos = new THREE.Vector3(center.x, center.y, center.z + cameraZ * 1.5);
+                    break;
+                case 'back':
+                    targetPos = new THREE.Vector3(center.x, center.y, center.z - cameraZ * 1.5);
+                    break;
+                case 'left':
+                    targetPos = new THREE.Vector3(center.x - cameraZ * 1.5, center.y, center.z);
+                    break;
+                case 'right':
+                    targetPos = new THREE.Vector3(center.x + cameraZ * 1.5, center.y, center.z);
+                    break;
+                case 'top':
+                    targetPos = new THREE.Vector3(center.x, center.y + cameraZ * 1.5, center.z);
+                    break;
+                case 'bottom':
+                    targetPos = new THREE.Vector3(center.x, center.y - cameraZ * 1.5, center.z);
+                    break;
+            }
+            lookAt = center;
+
+            cameraMove(targetPos, lookAt);
+        }
+
+        // Reset camera
+        function resetCamera() {
+            camera.position.copy(defaultCameraPosition);
+            controls.target.copy(defaultTargetPosition);
+            camera.lookAt(defaultTargetPosition);
+            controls.update();
+        }
     </script>
 </body>
 </html> 

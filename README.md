@@ -1,95 +1,121 @@
 # Product Design Assistant
 
-A Flask-based web application that helps users design products through a structured 3-phase approach:
+An end-to-end, conversation-driven product-design studio powered by Generative AI. Start with a raw idea and walk away with a market-ready design package that includes appearance specifications, a commercial strategy, high-resolution 2-D renders, and an interactable 3-D model.
 
-1. **Appearance Design Phase**: Create the visual and physical aspects of your product
-2. **Commercial Application Phase**: Define market positioning and commercial strategy 
-3. **Product Introduction Phase**: Get a unified product introduction document
+---
 
-The application features a modern glassmorphism UI with a chat interface for user interaction and dynamic content display.
+##  Core Features
 
-## Features
+• **Multi-phase conversational workflow**
+  1. **Appearance Design (Phase 1)** – refine form-factor, colours, materials and ergonomics.
+  2. **Commercial Application (Phase 2)** – position the product, define customers, pricing & Go-To-Market.
+  3. **Product Introduction (Phase 3)** – automatically synthesised executive brief that merges Phase 1 & 2.
+  4. **2-D Image Generation (Phase 4)** – create, iterate and upscale a hero render of the product.
+  5. **3-D Model Generation (Phase 5)** – generate a textured *.glb* model and preview it in-browser.
 
-- Interactive chat interface with OpenAI GPT models
-- Real-time display of design summaries
-- Markdown rendering for rich content presentation
-- Elegant fade transitions between phases
-- Responsive design for different screen sizes
-- Glassmorphism UI styling
+• **Unified glass-morphism UI** with chat, live markdown panels and smooth phase transitions.
 
-## Setup
+• **Streaming status indicators** for long-running image & model generation jobs.
 
-### Prerequisites
+• **Automatic artefact management** – every session is saved under `models/<timestamp>/` with
+  separate folders for conversation logs (**1d**), images (**2d**) and models (**3d**).
 
-- Python 3.8 or higher
-- OpenAI API key
+---
 
-### Installation
+##  Tech Stack
 
-1. Clone the repository:
-   ```
-   git clone <repository-url>
-   cd <repository-directory>
-   ```
+| Backend | Frontend               | AI / External APIs                     |
+| :------ | :--------------------- | :------------------------------------- |
+| Flask   | Vanilla JS, HTML & CSS | OpenAI GPT-4o & DALL·E-3 "gpt-image-1" |
+| Python  | Marked.js (Markdown)   | Google Gemini 2 Flash (image editing)  |
+| Pillow  | Prism.js (code hl)     | Meshy v5 (2-D ➜ 3-D)                   |
 
-2. Create a virtual environment:
-   ```
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   ```
+---
 
-3. Install dependencies:
-   ```
-   pip install -r requirements.txt
-   ```
+##  Quick Start
 
-4. Create a `.env` file in the project root and add your OpenAI API key:
-   ```
-   OPENAI_API_KEY=your_api_key_here
-   ```
-
-## Usage
-
-1. Start the Flask server:
-   ```
-   python app.py
-   ```
-
-2. Open a web browser and navigate to:
-   ```
-   http://127.0.0.1:5000/
-   ```
-
-3. Enter your name (optional) and start describing your product concept.
-
-4. Follow the guided process:
-   - Describe your product's appearance until satisfied, then type "Appearance design completed"
-   - Define commercial aspects until satisfied, then type "Commercial application design finished."
-   - View the final product introduction that combines both aspects
-
-5. All generated documents are saved in the following directories:
-   - `conversations/`: Chat history
-   - `summary/`: Design summaries
-   - `introduction/`: Final product introductions
-
-## Technologies Used
-
-- Backend: Flask, Python, OpenAI API
-- Frontend: HTML, CSS, JavaScript
-- Libraries: Marked.js (Markdown parsing), Prism.js (syntax highlighting)
-
-## Project Structure
-
+### 1. Clone & set-up
+```bash
+$ git clone <repo-url>
+$ cd product-design-assistant
+$ python -m venv venv && source venv/bin/activate  # Windows: venv\Scripts\activate
+$ pip install -r requirements.txt
 ```
+
+### 2. Configure API keys
+Create a `.env` file in the project root:
+```env
+OPENAI_API_KEY=sk-...
+GEMINI_API_KEY=...
+MESHY_API_KEY=...
+```
+(You may alternatively export the variables in your shell.)
+
+### 3. Run the server
+```bash
+$ python app.py
+# visit http://127.0.0.1:5000/ in your browser
+```
+
+---
+
+## Usage Workflow
+
+Inside the chat window, drive the conversation with the following keywords:
+
+| Phase 1           | When finished type            |
+| ----------------- | ----------------------------- |
+| Appearance design | `Appearance design completed` |
+
+| Phase 2                | When finished type                        |
+| ---------------------- | ----------------------------------------- |
+| Commercial application | `Commercial application design finished.` |
+
+| Phase 3                  | Generate introduction |
+| ------------------------ | --------------------- |
+| `Generate Introduction.` |
+
+| Phase 4             | Commands                |
+| ------------------- | ----------------------- |
+| Create first render | `create image`          |
+| Iterate / edit      | *describe your change*  |
+| Finalise & upscale  | `image design finished` |
+
+| Phase 5            | Command        |
+| ------------------ | -------------- |
+| Generate 3-D model | `create model` |
+
+All generated assets appear in the right-hand panel and are written to disk under `models/<timestamp>/`.
+
+---
+
+## Project Structure (simplified)
+```text
 .
-├── app.py                  # Main Flask application
-├── gpt_4_api.py            # OpenAI API integration
-├── prompts/                # Default prompt templates
-├── static/                 # Static assets
-│   ├── css/                # CSS stylesheets
-│   └── js/                 # JavaScript files
-├── templates/              # HTML templates
-├── conversations/          # Generated conversation histories
-├── summary/                # Generated design summaries
-└── introduction/           # Generated product introductions
-``` 
+├── app.py                 # Flask routes & phase logic
+├── _1dto1d.py             # OpenAI helper & prompt engine
+├── _2dto3d.py             # Meshy image➜3-D helper
+├── prompts/               # Default prompt templates
+├── templates/
+│   └── index.html         # Main UI
+├── static/
+│   ├── css/style.css
+│   └── js/script.js
+└── models/                # Session output (auto-created)
+    ├── 1d/ *.md           # Phase 1-3 markdown docs
+    ├── 2d/ *.png          # Phase 4 images
+    └── 3d/ *.glb          # Phase 5 models
+```
+
+---
+
+## License
+
+This project is released under the MIT License – see `LICENSE` for details.
+
+---
+
+## Contributing
+
+Pull requests and issue reports are welcome! Please open an issue to discuss a new feature before
+starting major work. 

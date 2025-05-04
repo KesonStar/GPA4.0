@@ -4,7 +4,7 @@ An end-to-end, conversation-driven product-design studio powered by Generative A
 
 Our pipeline is shown in the image below:
 
-![GPA4.0 Pipeline](pipeline.png)
+![GPA4.0 Pipeline](pipeline.svg)
 
 
 

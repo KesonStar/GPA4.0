@@ -1,10 +1,11 @@
-from flask import Flask, render_template, request, jsonify, send_file
+from flask import Flask, render_template, request, jsonify, send_file, redirect, url_for
 import _1dto1d as gpt_4_api
 import _2dto3d as meshy_api  # Import the Meshy API module
 import os
 import datetime  # Add datetime import
 import base64
 from io import BytesIO
+import shutil
 from dotenv import load_dotenv
 from openai import OpenAI
 from google import genai
@@ -27,13 +28,72 @@ session_save_path = None  # Add global variable for save path
 
 # Initialize API clients
 openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-gemini_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY", "Your Gemini API Key"))
+gemini_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY", "AIzaSyC_UzB4eXWc03oYVqHW8lfURigw5xDAuGM"))
 
 # Global variable to store the current image path
 current_image_path = None
 
+class Project:
+    def __init__(self, timestamp, thumbnail=None, model_filename=None):
+        self.timestamp = timestamp
+        self.thumbnail = thumbnail
+        self.model_filename = model_filename
+
+def get_all_projects():
+    projects = []
+    models_dir = os.path.join(os.getcwd(), "models")
+    
+    if not os.path.exists(models_dir):
+        return projects
+    
+    for folder in os.listdir(models_dir):
+        folder_path = os.path.join(models_dir, folder)
+        if os.path.isdir(folder_path):
+            # Check if there's a 2D folder with a Product 2d Image.png
+            product_image_path = os.path.join(folder_path, "2d", "Product 2d Image.png")
+            
+            if os.path.exists(product_image_path):
+                # Create thumbnail if it doesn't exist
+                thumbnail_name = f"{folder}_thumbnail.png"
+                thumbnail_path = os.path.join("static", "project_thumbnails", thumbnail_name)
+                
+                if not os.path.exists(os.path.join(os.getcwd(), thumbnail_path)):
+                    try:
+                        with Image.open(product_image_path) as img:
+                            img.thumbnail((300, 300))
+                            full_thumbnail_path = os.path.join(os.getcwd(), thumbnail_path)
+                            img.save(full_thumbnail_path)
+                    except Exception as e:
+                        print(f"Error creating thumbnail for {folder}: {e}")
+                        thumbnail_name = None
+                
+                # Check if there's a 3D model
+                model_filename = None
+                model_dir = os.path.join(folder_path, "3d")
+                if os.path.exists(model_dir):
+                    # Find first .glb file
+                    for file in os.listdir(model_dir):
+                        if file.endswith(".glb"):
+                            model_filename = os.path.join(folder, "3d", file)
+                            break
+                
+                projects.append(Project(folder, thumbnail_name, model_filename))
+    
+    # Sort projects by timestamp (newest first)
+    projects.sort(key=lambda x: x.timestamp, reverse=True)
+    return projects
+
+@app.route('/dashboard')
+def dashboard():
+    projects = get_all_projects()
+    return render_template('dashboard.html', projects=projects)
+
 @app.route('/')
-def index():
+def home():
+    return redirect(url_for('dashboard'))
+
+@app.route('/start-project')
+def start_project():
     global current_phase, appearance_conversation, commercial_conversation, appearance_summary, commercial_summary, product_introduction, session_save_path
     # Reset state on page load
     appearance_conversation = gpt_4_api.initialize_appearance_conversation()
@@ -554,6 +614,29 @@ def view_model(filename):
     
     # Render the 3D model viewer template with the model path
     return render_template('model_viewer.html', model_path=f"/get-model/{filename}")
+
+@app.route('/rename-project', methods=['POST'])
+def rename_project():
+    """API endpoint to rename a project"""
+    data = request.json
+    project_id = data.get('project_id')
+    new_name = data.get('new_name')
+    
+    if not project_id or not new_name:
+        return jsonify({"success": False, "message": "Missing project_id or new_name"}), 400
+    
+    try:
+        # This endpoint is optional since we're using localStorage, 
+        # but it's good to have for potential future server-side storage
+        return jsonify({
+            "success": True,
+            "message": f"Project {project_id} renamed to {new_name}"
+        })
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "message": f"Error renaming project: {str(e)}"
+        }), 500
 
 if __name__ == '__main__':
     # Create directories if they don't exist (Keep static/templates for Flask)

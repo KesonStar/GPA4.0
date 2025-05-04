@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>1D to 3D - Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.2.0/css/all.min.css">
+</head>
+<body>
+    <div class="dashboard-container">
+        <header class="header">
+            <h1>GPA4.0: Vibe Design Agent</h1>
+            <div class="actions">
+                <a href="{{ url_for('start_project') }}" class="create-project-btn">
+                    <i class="fas fa-plus"></i> Create Project
+                </a>
+            </div>
+        </header>
+
+        <main class="main-content">
+            <section class="gallery-section">
+                <h2>Project Gallery</h2>
+                <div class="gallery-grid">
+                    {% if projects %}
+                        {% for project in projects %}
+                            <div class="gallery-item" data-project-id="{{ project.timestamp }}">
+                                <div class="image-container">
+                                    <img src="{{ url_for('static', filename='project_thumbnails/' + project.thumbnail) }}" 
+                                         alt="{{ project.timestamp }}" 
+                                         onerror="this.src='{{ url_for('static', filename='images/placeholder.png') }}'">
+                                </div>
+                                <div class="gallery-item-footer">
+                                    <div class="project-name">
+                                        <span class="project-display-name">{{ project.timestamp }}</span>
+                                        <input type="text" class="project-name-input" value="{{ project.timestamp }}" />
+                                        <button class="edit-name-btn" title="Edit name">
+                                            <i class="fas fa-pencil"></i>
+                                        </button>
+                                        <button class="save-name-btn" title="Save">
+                                            <i class="fas fa-check"></i>
+                                        </button>
+                                        <button class="cancel-name-btn" title="Cancel">
+                                            <i class="fas fa-times"></i>
+                                        </button>
+                                    </div>
+                                    <span class="timestamp">{{ project.timestamp }}</span>
+                                    <div class="actions-group">
+                                        {% if project.model_filename %}
+                                        <a href="{{ url_for('view_model', filename=project.model_filename) }}" class="view-model-btn">
+                                            <i class="fas fa-cube"></i> View Model
+                                        </a>
+                                        {% endif %}
+                                        <button class="rename-btn" data-project-id="{{ project.timestamp }}">
+                                            <i class="fas fa-tag"></i> Rename
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="no-projects">
+                            <p>No projects yet. Click "Create Project" to get started.</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Rename Modal -->
+    <div class="rename-modal" id="renameModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Rename Project</h3>
+            </div>
+            <div class="modal-body">
+                <p>Enter a new name for this project:</p>
+                <input type="text" id="newProjectName" placeholder="Enter project name">
+                <input type="hidden" id="projectId">
+            </div>
+            <div class="modal-footer">
+                <button class="modal-btn cancel-btn" id="cancelRename">Cancel</button>
+                <button class="modal-btn save-btn" id="saveRename">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Load saved project names from localStorage
+            loadSavedProjectNames();
+            
+            // Setup rename buttons
+            const renameButtons = document.querySelectorAll('.rename-btn');
+            const modal = document.getElementById('renameModal');
+            const projectIdInput = document.getElementById('projectId');
+            const newNameInput = document.getElementById('newProjectName');
+            const saveButton = document.getElementById('saveRename');
+            const cancelButton = document.getElementById('cancelRename');
+            
+            // Inline editing functionality
+            const editButtons = document.querySelectorAll('.edit-name-btn');
+            editButtons.forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const nameContainer = this.closest('.project-name');
+                    const displayName = nameContainer.querySelector('.project-display-name');
+                    const input = nameContainer.querySelector('.project-name-input');
+                    const saveBtn = nameContainer.querySelector('.save-name-btn');
+                    const cancelBtn = nameContainer.querySelector('.cancel-name-btn');
+                    
+                    // Hide display name and show input
+                    displayName.style.display = 'none';
+                    this.style.display = 'none';
+                    input.style.display = 'block';
+                    saveBtn.style.display = 'inline-block';
+                    cancelBtn.style.display = 'inline-block';
+                    input.focus();
+                    input.select();
+                });
+            });
+            
+            // Save inline edit
+            const saveNameButtons = document.querySelectorAll('.save-name-btn');
+            saveNameButtons.forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const nameContainer = this.closest('.project-name');
+                    const displayName = nameContainer.querySelector('.project-display-name');
+                    const input = nameContainer.querySelector('.project-name-input');
+                    const editBtn = nameContainer.querySelector('.edit-name-btn');
+                    const cancelBtn = nameContainer.querySelector('.cancel-name-btn');
+                    const projectId = this.closest('.gallery-item').dataset.projectId;
+                    
+                    // Save the new name
+                    const newName = input.value.trim();
+                    if (newName) {
+                        displayName.textContent = newName;
+                        saveProjectName(projectId, newName);
+                    }
+                    
+                    // Reset UI
+                    displayName.style.display = 'inline';
+                    editBtn.style.display = 'inline-block';
+                    input.style.display = 'none';
+                    this.style.display = 'none';
+                    cancelBtn.style.display = 'none';
+                });
+            });
+            
+            // Cancel inline edit
+            const cancelNameButtons = document.querySelectorAll('.cancel-name-btn');
+            cancelNameButtons.forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const nameContainer = this.closest('.project-name');
+                    const displayName = nameContainer.querySelector('.project-display-name');
+                    const input = nameContainer.querySelector('.project-name-input');
+                    const editBtn = nameContainer.querySelector('.edit-name-btn');
+                    const saveBtn = nameContainer.querySelector('.save-name-btn');
+                    
+                    // Reset input value
+                    input.value = displayName.textContent;
+                    
+                    // Reset UI
+                    displayName.style.display = 'inline';
+                    editBtn.style.display = 'inline-block';
+                    input.style.display = 'none';
+                    saveBtn.style.display = 'none';
+                    this.style.display = 'none';
+                });
+            });
+            
+            // Modal rename functionality
+            renameButtons.forEach(button => {
+                button.addEventListener('click', function() {
+                    const projectId = this.dataset.projectId;
+                    const projectItem = document.querySelector(`.gallery-item[data-project-id="${projectId}"]`);
+                    const currentName = projectItem.querySelector('.project-display-name').textContent;
+                    
+                    projectIdInput.value = projectId;
+                    newNameInput.value = currentName;
+                    modal.style.display = 'flex';
+                    newNameInput.focus();
+                    newNameInput.select();
+                });
+            });
+            
+            saveButton.addEventListener('click', function() {
+                const projectId = projectIdInput.value;
+                const newName = newNameInput.value.trim();
+                
+                if (newName) {
+                    const projectItem = document.querySelector(`.gallery-item[data-project-id="${projectId}"]`);
+                    const displayName = projectItem.querySelector('.project-display-name');
+                    const input = projectItem.querySelector('.project-name-input');
+                    
+                    displayName.textContent = newName;
+                    input.value = newName;
+                    saveProjectName(projectId, newName);
+                    
+                    modal.style.display = 'none';
+                }
+            });
+            
+            cancelButton.addEventListener('click', function() {
+                modal.style.display = 'none';
+            });
+            
+            // Close modal when clicking outside
+            window.addEventListener('click', function(event) {
+                if (event.target === modal) {
+                    modal.style.display = 'none';
+                }
+            });
+            
+            // Handle Enter key in modal input
+            newNameInput.addEventListener('keyup', function(event) {
+                if (event.key === 'Enter') {
+                    saveButton.click();
+                }
+            });
+            
+            // Functions to save and load project names
+            function saveProjectName(projectId, name) {
+                let projectNames = JSON.parse(localStorage.getItem('projectNames') || '{}');
+                projectNames[projectId] = name;
+                localStorage.setItem('projectNames', JSON.stringify(projectNames));
+            }
+            
+            function loadSavedProjectNames() {
+                const projectNames = JSON.parse(localStorage.getItem('projectNames') || '{}');
+                
+                for (const [projectId, name] of Object.entries(projectNames)) {
+                    const projectItem = document.querySelector(`.gallery-item[data-project-id="${projectId}"]`);
+                    if (projectItem) {
+                        const displayName = projectItem.querySelector('.project-display-name');
+                        const input = projectItem.querySelector('.project-name-input');
+                        
+                        if (displayName && input) {
+                            displayName.textContent = name;
+                            input.value = name;
+                        }
+                    }
+                }
+            }
+        });
+    </script>
+</body>
+</html> 

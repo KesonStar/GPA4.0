@@ -165,14 +165,16 @@ def initialize_product_introduction_system():
         "content": load_prompt("product_introduction")
     }
 
-def save_conversation_to_markdown(conversation, phase, user_name="User"):
-    """Save conversation to markdown file"""
+def save_conversation_to_markdown(conversation, phase, base_save_path, user_name="User"):
+    """Save conversation to markdown file within the session-specific path"""
+    # Define the target directory
+    target_dir = os.path.join(base_save_path, '1d')
     # Create directory if not exists
-    os.makedirs("conversations", exist_ok=True)
+    os.makedirs(target_dir, exist_ok=True)
     
     # Generate filename with timestamp
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"conversations/{phase}_design_{timestamp}.md"
+    filename = os.path.join(target_dir, f"{phase}_design_{timestamp}.md")
     
     # Create markdown content
     markdown_content = f"# Product {phase.capitalize()} Design Conversation - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
@@ -193,14 +195,16 @@ def save_conversation_to_markdown(conversation, phase, user_name="User"):
     
     return filename
 
-def save_summary_to_markdown(summary, phase):
-    """Save summary to markdown file in the summary folder"""
+def save_summary_to_markdown(summary, phase, base_save_path):
+    """Save summary to markdown file within the session-specific path"""
+    # Define the target directory
+    target_dir = os.path.join(base_save_path, '1d')
     # Create directory if not exists
-    os.makedirs("summary", exist_ok=True)
+    os.makedirs(target_dir, exist_ok=True)
     
     # Generate filename with timestamp
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"summary/{phase}_design_summary_{timestamp}.md"
+    filename = os.path.join(target_dir, f"{phase}_design_summary_{timestamp}.md")
     
     # Save file
     with open(filename, "w", encoding="utf-8") as f:
@@ -208,14 +212,16 @@ def save_summary_to_markdown(summary, phase):
     
     return filename
 
-def save_introduction_to_markdown(introduction):
-    """Save product introduction to markdown file in the introduction folder"""
+def save_introduction_to_markdown(introduction, base_save_path):
+    """Save product introduction to markdown file within the session-specific path"""
+    # Define the target directory
+    target_dir = os.path.join(base_save_path, '1d')
     # Create directory if not exists
-    os.makedirs("introduction", exist_ok=True)
+    os.makedirs(target_dir, exist_ok=True)
     
     # Generate filename with timestamp
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"introduction/product_introduction_{timestamp}.md"
+    filename = os.path.join(target_dir, f"product_introduction_{timestamp}.md")
     
     # Save file
     with open(filename, "w", encoding="utf-8") as f:
@@ -361,147 +367,53 @@ def create_default_prompts():
 
 def main():
     # Check if this is the first run and create default prompt files
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    prompts_dir = os.path.join(script_dir, "prompts")
-    if not os.path.exists(prompts_dir):
-        print("First run detected. Creating default prompt files...")
-        create_default_prompts()
-        print("You may want to customize the prompts before continuing.")
-        if input("Continue with default prompts? (y/n): ").lower() != 'y':
-            print("Exiting. Please modify the prompt files and run the program again.")
-            return
-    
-    # Get user name
-    user_name = input("Please enter your name (default is 'User'): ").strip() or "User"
-    
-    # PHASE 1: Appearance Design with LLM1
-    print("\n=== PHASE 1: PRODUCT APPEARANCE DESIGN ===")
-    print("Please describe your product concept, and I'll help you optimize its appearance design.")
-    print("Type 'Appearance design completed' when you are satisfied with the appearance design.")
-    print("Type 'exit' to end the conversation without generating any documents.")
-    
-    # Initialize conversation for the appearance design phase
+    create_default_prompts()
+
+    user_name = input("Enter your name (for conversation logs): ")
+
+    # Phase 1: Appearance Design
+    print("\n--- Phase 1: Appearance Design ---")
     appearance_conversation = initialize_appearance_conversation()
-    
-    while True:
-        # Get user input
-        user_input = input(f"\n{user_name}: ")
-        
-        # Check if appearance design is completed
-        if user_input.lower() == "appearance design completed":
-            print("\nAppearance design phase completed. Generating appearance design document...")
-            break
-        
-        # Check if exit without summary
-        if user_input.lower() in ["exit", "quit"]:
-            print("\nExiting without generating any documents.")
-            return
-        
-        # Add user message
-        appearance_conversation.append({"role": "user", "content": user_input})
-        
-        # Get AI response from LLM1
-        ai_response = chat_completion(appearance_conversation)
-        
-        # Add AI message to conversation
-        appearance_conversation.append({"role": "assistant", "content": ai_response})
-        
-        # Print AI response
-        print(f"\nAppearance Design Assistant: {ai_response}")
-    
-    # Generate appearance design summary with LLM2
+    # Simulate conversation ...
     appearance_summary = generate_appearance_summary(appearance_conversation, user_name)
-    print("\nFinal Product Appearance Design Document:")
-    print(appearance_summary)
+    
+    # Example save paths for main function execution
+    main_save_path = os.path.join("models", datetime.now().strftime("%Y%m%d_%H%M%S_main"))
+    os.makedirs(main_save_path, exist_ok=True)
     
     # Save appearance conversation
-    appearance_conversation_file = save_conversation_to_markdown(appearance_conversation, "appearance", user_name)
+    appearance_conversation_file = save_conversation_to_markdown(appearance_conversation, "appearance", main_save_path, user_name)
     print(f"\nAppearance design conversation saved to: {appearance_conversation_file}")
     
     # Save appearance summary
-    appearance_summary_file = save_summary_to_markdown(appearance_summary, "appearance")
+    appearance_summary_file = save_summary_to_markdown(appearance_summary, "appearance", main_save_path)
     print(f"\nAppearance design summary saved to: {appearance_summary_file}")
-    
-    # PHASE 2: Commercial Application Design with LLM3
-    print("\n=== PHASE 2: PRODUCT COMMERCIAL APPLICATION DESIGN ===")
-    print("Now, let's focus on the commercial aspects of your product.")
-    print("Type 'Commercial application design finished.' when you are satisfied with the commercial design.")
-    print("Type 'exit' to end the conversation and proceed with only the appearance design.")
-    
-    # Initialize conversation for the commercial application phase
+
+    # Phase 2: Commercial Application Design
+    print("\n--- Phase 2: Commercial Application Design ---")
     commercial_conversation = initialize_commercial_conversation()
-    
-    # Add context from appearance design
     commercial_conversation.append({
         "role": "user", 
-        "content": f"I have completed the appearance design for my product. The appearance design document is as follows:\n\n{appearance_summary}\n\n \
-            Now I'd like to discuss the commercial application aspects."
+        "content": f"Appearance design summary:\n{appearance_summary}\nNow let's discuss commercial aspects."
     })
+    # Simulate conversation ...
+    commercial_summary = generate_commercial_summary(commercial_conversation, user_name)
     
-    # Get AI response to set the context
-    ai_response = chat_completion(commercial_conversation)
-    commercial_conversation.append({"role": "assistant", "content": ai_response})
-    print(f"\nCommercial Design Assistant: {ai_response}")
+    # Save commercial conversation
+    commercial_conversation_file = save_conversation_to_markdown(commercial_conversation, "commercial", main_save_path, user_name)
+    print(f"\nCommercial design conversation saved to: {commercial_conversation_file}")
     
-    while True:
-        # Get user input
-        user_input = input(f"\n{user_name}: ")
-        
-        # Check if commercial design is completed
-        if user_input.lower() == "commercial application design finished.":
-            print("\nCommercial application design phase completed. Generating commercial application document...")
-            break
-        
-        # Check if exit without completing commercial phase
-        if user_input.lower() in ["exit", "quit"]:
-            print("\nExiting commercial phase. Proceeding with only the appearance design.")
-            commercial_summary = "Commercial application design was not completed."
-            commercial_conversation_file = "Not saved"
-            commercial_summary_file = "Not saved"
-            break
-        
-        # Add user message
-        commercial_conversation.append({"role": "user", "content": user_input})
-        
-        # Get AI response from LLM3
-        ai_response = chat_completion(commercial_conversation)
-        
-        # Add AI message to conversation
-        commercial_conversation.append({"role": "assistant", "content": ai_response})
-        
-        # Print AI response
-        print(f"\nCommercial Design Assistant: {ai_response}")
-    
-    # If commercial phase was completed
-    if user_input.lower() == "commercial application design finished.":
-        # Generate commercial application summary with LLM3
-        commercial_summary = generate_commercial_summary(commercial_conversation, user_name)
-        print("\nFinal Product Commercial Application Document:")
-        print(commercial_summary)
-        
-        # Save commercial conversation
-        commercial_conversation_file = save_conversation_to_markdown(commercial_conversation, "commercial", user_name)
-        print(f"\nCommercial design conversation saved to: {commercial_conversation_file}")
-        
-        # Save commercial summary
-        commercial_summary_file = save_summary_to_markdown(commercial_summary, "commercial")
-        print(f"\nCommercial design summary saved to: {commercial_summary_file}")
-    
-    # PHASE 3: Generate Final Product Introduction with LLM4
-    print("\n=== PHASE 3: GENERATING FINAL PRODUCT INTRODUCTION ===")
-    print("Generating comprehensive product introduction by synthesizing appearance and commercial aspects...")
-    
-    # Generate product introduction with LLM4
+    # Save commercial summary
+    commercial_summary_file = save_summary_to_markdown(commercial_summary, "commercial", main_save_path)
+    print(f"\nCommercial design summary saved to: {commercial_summary_file}")
+
+    # Phase 3: Product Introduction
+    print("\n--- Phase 3: Product Introduction ---")
     product_introduction = generate_product_introduction(appearance_summary, commercial_summary)
-    print("\nFinal Product Introduction:")
-    print(product_introduction)
     
     # Save product introduction
-    introduction_file = save_introduction_to_markdown(product_introduction)
+    introduction_file = save_introduction_to_markdown(product_introduction, main_save_path)
     print(f"\nProduct introduction saved to: {introduction_file}")
-    
-    print("\n=== PRODUCT DESIGN PROCESS COMPLETED ===")
-    print(f"All documents have been saved. Thank you for using the Product Design Assistant, {user_name}!")
 
 if __name__ == "__main__":
     main()

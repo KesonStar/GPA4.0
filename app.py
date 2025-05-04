@@ -1,6 +1,7 @@
 from flask import Flask, render_template, request, jsonify
 import gpt_4_api
 import os
+import datetime  # Add datetime import
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -9,31 +10,48 @@ load_dotenv()
 app = Flask(__name__)
 
 # Initialize conversation states
-appearance_conversation = gpt_4_api.initialize_appearance_conversation()
-commercial_conversation = gpt_4_api.initialize_commercial_conversation()
+appearance_conversation = None
+commercial_conversation = None
 appearance_summary = ""
 commercial_summary = ""
 product_introduction = ""
-current_phase = 1
+current_phase = 0
+session_save_path = None  # Add global variable for save path
 
 @app.route('/')
 def index():
-    global current_phase, appearance_conversation, commercial_conversation
+    global current_phase, appearance_conversation, commercial_conversation, appearance_summary, commercial_summary, product_introduction, session_save_path
     # Reset state on page load
     appearance_conversation = gpt_4_api.initialize_appearance_conversation()
     commercial_conversation = gpt_4_api.initialize_commercial_conversation()
+    appearance_summary = ""
+    commercial_summary = ""
+    product_introduction = ""
     current_phase = 1
+    
+    # Create session-specific save directory
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    session_save_path = os.path.join("models", timestamp)
+    os.makedirs(session_save_path, exist_ok=True) # Create the base timestamped directory
+    # The '1d' subdirectory will be created by the saving functions
+    
     return render_template('index.html')
 
 @app.route('/chat', methods=['POST'])
 def chat():
-    global appearance_conversation, commercial_conversation, appearance_summary, commercial_summary, product_introduction, current_phase
+    global appearance_conversation, commercial_conversation, appearance_summary, commercial_summary, product_introduction, current_phase, session_save_path
     
     data = request.json
     user_input = data.get('message', '')
     
     if not user_input:
         return jsonify({"error": "No message provided"}), 400
+        
+    if session_save_path is None:
+        # Should not happen if '/' is called first, but as a safeguard
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        session_save_path = os.path.join("models", timestamp)
+        os.makedirs(session_save_path, exist_ok=True)
     
     # Phase 1: Appearance Design
     if current_phase == 1:
@@ -42,9 +60,9 @@ def chat():
             # Generate appearance summary
             appearance_summary = gpt_4_api.generate_appearance_summary(appearance_conversation, "User")
             
-            # Save appearance conversation and summary
-            appearance_conversation_file = gpt_4_api.save_conversation_to_markdown(appearance_conversation, "appearance", "User")
-            appearance_summary_file = gpt_4_api.save_summary_to_markdown(appearance_summary, "appearance")
+            # Save appearance conversation and summary to session path
+            appearance_conversation_file = gpt_4_api.save_conversation_to_markdown(appearance_conversation, "appearance", session_save_path, "User")
+            appearance_summary_file = gpt_4_api.save_summary_to_markdown(appearance_summary, "appearance", session_save_path)
             
             # Move to Phase 2
             current_phase = 2
@@ -52,7 +70,7 @@ def chat():
             # Add context from appearance design to commercial conversation
             commercial_conversation.append({
                 "role": "user", 
-                "content": f"I have completed the appearance design for my product. The appearance design document is as follows:\n\n{appearance_summary}\n\n \
+                "content": f"I have completed the appearance design for my product. The appearance design document is as follows:\\n\\n{appearance_summary}\\n\\n \
                     Now I'd like to discuss the commercial application aspects."
             })
             
@@ -88,9 +106,9 @@ def chat():
             # Generate commercial summary
             commercial_summary = gpt_4_api.generate_commercial_summary(commercial_conversation, "User")
             
-            # Save commercial conversation and summary
-            commercial_conversation_file = gpt_4_api.save_conversation_to_markdown(commercial_conversation, "commercial", "User")
-            commercial_summary_file = gpt_4_api.save_summary_to_markdown(commercial_summary, "commercial")
+            # Save commercial conversation and summary to session path
+            commercial_conversation_file = gpt_4_api.save_conversation_to_markdown(commercial_conversation, "commercial", session_save_path, "User")
+            commercial_summary_file = gpt_4_api.save_summary_to_markdown(commercial_summary, "commercial", session_save_path)
             
             # Move to Phase 2.5 (Introduction preparation)
             current_phase = 2.5
@@ -126,11 +144,11 @@ def chat():
             # Generate product introduction
             product_introduction = gpt_4_api.generate_product_introduction(appearance_summary, commercial_summary)
             
-            # Save product introduction
-            introduction_file = gpt_4_api.save_introduction_to_markdown(product_introduction)
+            # Save product introduction to session path
+            introduction_file = gpt_4_api.save_introduction_to_markdown(product_introduction, session_save_path)
             
             return jsonify({
-                "response": "Generating final product introduction...",
+                "response": "Product introduction generated.", # Kept the change from previous request
                 "phase": current_phase,
                 "product_introduction": product_introduction,
                 "message": "Product design process completed. The final product introduction has been generated."
@@ -150,12 +168,15 @@ def chat():
         })
 
 if __name__ == '__main__':
-    # Create directories if they don't exist
-    os.makedirs("static", exist_ok=True)
+    # Create directories if they don't exist (Keep static/templates for Flask)
+    os.makedirs("static", exist_ok=True) 
     os.makedirs("templates", exist_ok=True)
+    # Ensure models directory exists (optional, as it's created per session)
+    os.makedirs("models", exist_ok=True) 
     
     # Create default prompts if not exists
+    # This assumes prompts are still stored relative to gpt_4_api.py
     if not os.path.exists("prompts"):
-        gpt_4_api.create_default_prompts()
+         gpt_4_api.create_default_prompts()
     
     app.run(debug=True) 

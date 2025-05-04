@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Model Viewer - GPA4.0</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.2.0/css/all.min.css">
+    <script async src="https://unpkg.com/es-module-shims@1.6.3/dist/es-module-shims.js"></script>
+    <script type="importmap">
+        {
+          "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.174.0/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.174.0/examples/jsm/"
+          }
+        }
+    </script>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            width: 100%;
+            height: 100%;
+        }
+        
+        .model-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            box-sizing: border-box;
+        }
+        
+        .model-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 30px;
+            margin-bottom: 20px;
+            border-radius: 16px;
+            background: var(--glass-bg);
+            backdrop-filter: var(--backdrop-blur);
+            -webkit-backdrop-filter: var(--backdrop-blur);
+            border: 1px solid var(--border-color);
+            box-shadow: var(--shadow);
+        }
+        
+        .model-title {
+            font-size: 1.5rem;
+            color: var(--primary-color);
+            text-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        }
+        
+        .back-btn {
+            display: inline-flex;
+            align-items: center;
+            background-color: var(--primary-color);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 12px rgba(74, 107, 255, 0.25);
+        }
+        
+        .back-btn:hover {
+            background-color: var(--primary-hover);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(74, 107, 255, 0.3);
+        }
+        
+        .back-btn i {
+            margin-right: 8px;
+        }
+        
+        .model-content {
+            flex: 1;
+            display: flex;
+            border-radius: 16px;
+            overflow: hidden;
+            position: relative;
+            background: var(--glass-bg);
+            backdrop-filter: var(--backdrop-blur);
+            -webkit-backdrop-filter: var(--backdrop-blur);
+            border: 1px solid var(--border-color);
+            box-shadow: var(--shadow);
+        }
+        
+        #scene-container {
+            flex: 1;
+            width: 100%;
+            height: 100%;
+            position: relative;
+        }
+        
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            background: var(--glass-card);
+            backdrop-filter: var(--backdrop-blur);
+            -webkit-backdrop-filter: var(--backdrop-blur);
+            border: 1px solid var(--border-color);
+            padding: 20px;
+            border-radius: 16px;
+            z-index: 200;
+            color: var(--text-color);
+            box-shadow: var(--shadow);
+        }
+        
+        #progress-bar {
+            width: 300px;
+            height: 10px;
+            background-color: rgba(255, 255, 255, 0.2);
+            border-radius: 10px;
+            margin: 15px auto;
+            overflow: hidden;
+        }
+        
+        #progress {
+            height: 100%;
+            width: 0%;
+            background-color: var(--primary-color);
+            transition: width 0.3s;
+        }
+        
+        #menu {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: var(--glass-card);
+            backdrop-filter: var(--backdrop-blur);
+            -webkit-backdrop-filter: var(--backdrop-blur);
+            border: 1px solid var(--border-color);
+            color: var(--text-color);
+            border-radius: 12px;
+            padding: 15px;
+            width: 240px;
+            z-index: 100;
+            box-shadow: var(--shadow);
+            transition: right 0.3s ease;
+        }
+        
+        #menu.collapsed {
+            right: -255px;
+        }
+        
+        #toggle-menu-btn {
+            position: absolute;
+            left: -40px;
+            top: 10px;
+            background: var(--glass-card);
+            backdrop-filter: var(--backdrop-blur);
+            -webkit-backdrop-filter: var(--backdrop-blur);
+            border: 1px solid var(--border-color);
+            color: var(--text-color);
+            border: none;
+            border-radius: 8px 0 0 8px;
+            padding: 10px;
+            cursor: pointer;
+            font-size: 16px;
+            z-index: 99;
+            transition: background-color 0.2s;
+            box-shadow: -5px 0 15px rgba(0, 0, 0, 0.05);
+        }
+        
+        #menu h3 {
+            margin-top: 0;
+            margin-bottom: 15px;
+            color: var(--primary-color);
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 10px;
+            font-size: 1.2rem;
+        }
+        
+        .control-group {
+            margin-bottom: 20px;
+        }
+        
+        .view-buttons {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+            margin-bottom: 15px;
+        }
+        
+        .view-btn {
+            flex: 1;
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 8px 5px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .view-btn:hover {
+            background: var(--primary-hover);
+            transform: translateY(-2px);
+        }
+        
+        .control-label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: var(--text-color);
+        }
+        
+        input[type="range"] {
+            width: 100%;
+            margin-top: 5px;
+            accent-color: var(--primary-color);
+        }
+        
+        .range-value {
+            display: inline-block;
+            width: 40px;
+            text-align: right;
+            color: var(--primary-color);
+            font-weight: 600;
+        }
+        
+        input[type="checkbox"] {
+            accent-color: var(--primary-color);
+            margin-right: 8px;
+        }
+        
+        #reset-model {
+            width: 100%;
+            background: #e74c3c;
+            color: white;
+            border: none;
+            padding: 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin-top: 10px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+        
+        #reset-model:hover {
+            background: #c0392b;
+            transform: translateY(-2px);
+        }
+    </style>
+</head>
+<body>
+    <div class="model-container">
+        <div class="model-header">
+            <h1 class="model-title">3D Model Viewer</h1>
+            <a href="{{ url_for('dashboard') }}" class="back-btn" target="_top">
+                <i class="fas fa-arrow-left"></i> Back to Dashboard
+            </a>
+        </div>
+        
+        <div class="model-content">
+            <div id="scene-container"></div>
+            
+            <div id="loading">
+                <div>Loading 3D Model...</div>
+                <div id="progress-bar"><div id="progress"></div></div>
+                <div id="progress-text">0%</div>
+            </div>
+            
+            <div id="menu">
+                <button id="toggle-menu-btn"><i class="fas fa-chevron-left"></i></button>
+                <h3>Model Controls</h3>
+                <div class="control-group">
+                    <div class="view-buttons">
+                        <button id="view-front" class="view-btn">Front</button>
+                        <button id="view-back" class="view-btn">Back</button>
+                        <button id="view-left" class="view-btn">Left</button>
+                        <button id="view-right" class="view-btn">Right</button>
+                        <button id="view-top" class="view-btn">Top</button>
+                        <button id="view-bottom" class="view-btn">Bottom</button>
+                        <button id="reset-camera" class="view-btn" style="grid-column: span 3; background-color: #e67e22;">Reset Camera</button>
+                    </div>
+                </div>
+                
+                <div class="control-group">
+                    <label class="control-label">Scale: <span id="scale-value" class="range-value">1.0</span></label>
+                    <input type="range" id="scale" min="0.1" max="5" step="0.1" value="1">
+                </div>
+                
+                <div class="control-group">
+                    <label class="control-label">Position Y: <span id="position-y-value" class="range-value">0.0</span></label>
+                    <input type="range" id="position-y" min="-5" max="5" step="0.1" value="0">
+                </div>
+                
+                <div class="control-group">
+                    <label class="control-label">Model Rotation</label>
+                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px;">
+                        <button id="rotate-x-minus" class="view-btn">X-</button>
+                        <button id="rotate-y-minus" class="view-btn">Y-</button>
+                        <button id="rotate-z-minus" class="view-btn">Z-</button>
+                        <button id="rotate-x-plus" class="view-btn">X+</button>
+                        <button id="rotate-y-plus" class="view-btn">Y+</button>
+                        <button id="rotate-z-plus" class="view-btn">Z+</button>
+                    </div>
+                </div>
+                
+                <div class="control-group">
+                    <label class="control-label">Rotation Speed:</label>
+                    <input type="range" id="rotation-speed" min="0" max="5" step="0.5" value="2">
+                </div>
+                
+                <div class="control-group">
+                    <label>
+                        <input type="checkbox" id="autoRotate"> Auto-rotate
+                    </label>
+                </div>
+                
+                <div class="control-group">
+                    <button id="reset-model">Reset Model</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+        import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+        import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+        // Define THREE.js path
+        const THREE_VERSION = '0.174.0';
+        const THREE_PATH = `https://unpkg.com/three@${THREE_VERSION}`;
+        
+        // Get the model path from the Flask template
+        const modelPath = "{{ model_path }}";
+        const modelNameParts = modelPath.split('/');
+        const modelName = modelNameParts[modelNameParts.length - 1];
+        document.querySelector('.model-title').textContent = `Viewing: ${modelName}`;
+
+        let controls, scene, camera, renderer, model;
+        let defaultCameraPosition = new THREE.Vector3();
+        let defaultTargetPosition = new THREE.Vector3();
+        let defaultModelPosition = new THREE.Vector3();
+        let defaultModelRotation = new THREE.Euler();
+        let defaultModelScale = new THREE.Vector3();
+        let initialZoom;
+
+        // UI Elements
+        const loadingDiv = document.getElementById('loading');
+        const progressBar = document.getElementById('progress');
+        const progressText = document.getElementById('progress-text');
+        const autoRotateCheckbox = document.getElementById('autoRotate');
+        const scaleSlider = document.getElementById('scale');
+        const scaleValue = document.getElementById('scale-value');
+        const positionYSlider = document.getElementById('position-y');
+        const positionYValue = document.getElementById('position-y-value');
+        const rotationSpeedSlider = document.getElementById('rotation-speed');
+        const menuPanel = document.getElementById('menu');
+        const toggleMenuBtn = document.getElementById('toggle-menu-btn');
+
+        // Initialize scene
+        init();
+        
+        // Toggle menu panel
+        toggleMenuBtn.addEventListener('click', function() {
+            menuPanel.classList.toggle('collapsed');
+            if (menuPanel.classList.contains('collapsed')) {
+                toggleMenuBtn.innerHTML = '<i class="fas fa-chevron-right"></i>';
+            } else {
+                toggleMenuBtn.innerHTML = '<i class="fas fa-chevron-left"></i>';
+            }
+        });
+
+        function init() {
+            // Create scene
+            scene = new THREE.Scene();
+            scene.background = null;
+            
+            // Create camera
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 0, 5);
+            defaultCameraPosition.copy(camera.position);
+            
+            // Create renderer with transparency and high quality
+            renderer = new THREE.WebGLRenderer({ 
+                antialias: true,
+                alpha: true
+            });
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            const container = document.getElementById('scene-container');
+            container.appendChild(renderer.domElement);
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            
+            renderer.toneMapping = THREE.ACESFilmicToneMapping;
+            renderer.toneMappingExposure = 1;
+            renderer.outputColorSpace = THREE.SRGBColorSpace;
+            
+            // Setup orbit controls
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.screenSpacePanning = false;
+            controls.minDistance = 0.1;
+            controls.maxDistance = 50;
+            controls.target.set(0, 0, 0);
+            defaultTargetPosition.copy(controls.target);
+            initialZoom = controls.target.distanceTo(camera.position);
+            
+            // Setup environment
+            const environment = new RoomEnvironment();
+            const pmremGenerator = new THREE.PMREMGenerator(renderer);
+            scene.environment = pmremGenerator.fromScene(environment).texture;
+            environment.dispose();
+            pmremGenerator.dispose();
+            
+            // Setup ambient light
+            const ambientLight = new THREE.AmbientLight(0xffffff, 1.0);
+            scene.add(ambientLight);
+            
+            // Setup directional light
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 1.5);
+            directionalLight.position.set(5, 10, 7.5);
+            scene.add(directionalLight);
+            
+            // Setup loader
+            const dracoLoader = new DRACOLoader();
+            dracoLoader.setDecoderPath(`${THREE_PATH}/examples/jsm/libs/draco/gltf/`);
+            
+            const loader = new GLTFLoader();
+            loader.setDRACOLoader(dracoLoader);
+            
+            // Load model
+            loader.load(
+                modelPath,
+                function(gltf) {
+                    model = gltf.scene;
+                    
+                    const box = new THREE.Box3().setFromObject(model);
+                    const size = box.getSize(new THREE.Vector3());
+                    const center = box.getCenter(new THREE.Vector3());
+                    
+                    model.position.x += (model.position.x - center.x);
+                    model.position.y += (model.position.y - center.y);
+                    model.position.z += (model.position.z - center.z);
+
+                    const maxDim = Math.max(size.x, size.y, size.z);
+                    const fov = camera.fov * (Math.PI / 180);
+                    let cameraZ = Math.abs(maxDim / 2 / Math.tan(fov / 2));
+                    cameraZ *= 1.5;
+                    
+                    camera.position.set(0, 0, cameraZ);
+                    defaultCameraPosition.copy(camera.position);
+                    
+                    controls.target.copy(center);
+                    controls.update();
+                    defaultTargetPosition.copy(controls.target);
+
+                    defaultModelPosition.copy(model.position);
+                    defaultModelRotation.copy(model.rotation);
+                    defaultModelScale.copy(model.scale);
+                    
+                    scene.add(model);
+                    
+                    loadingDiv.style.display = 'none';
+                },
+                function(xhr) {
+                    const percent = Math.round((xhr.loaded / xhr.total) * 100);
+                    progressBar.style.width = percent + '%';
+                    progressText.textContent = percent + '%';
+                },
+                function(error) {
+                    console.error('Error loading model:', error);
+                    loadingDiv.innerHTML = 'Error loading model<br>' + error.message;
+                }
+            );
+            
+            // Setup resize handler
+            window.addEventListener('resize', onWindowResize);
+            
+            // Setup animation
+            animate();
+            
+            // Setup UI controls
+            setupUIControls();
+        }
+        
+        function onWindowResize() {
+            const container = document.getElementById('scene-container');
+            if (!container) return;
+
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+
+            camera.aspect = width / height;
+            camera.updateProjectionMatrix();
+            renderer.setSize(width, height);
+        }
+        
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            controls.update();
+            
+            if (model && autoRotateCheckbox.checked) {
+                const speed = parseFloat(rotationSpeedSlider.value) * 0.01;
+                model.rotation.y += speed;
+            }
+            
+            renderer.render(scene, camera);
+        }
+        
+        function setupUIControls() {
+            // Setup view buttons
+            document.getElementById('view-front').addEventListener('click', function() { setView('front'); });
+            document.getElementById('view-back').addEventListener('click', function() { setView('back'); });
+            document.getElementById('view-left').addEventListener('click', function() { setView('left'); });
+            document.getElementById('view-right').addEventListener('click', function() { setView('right'); });
+            document.getElementById('view-top').addEventListener('click', function() { setView('top'); });
+            document.getElementById('view-bottom').addEventListener('click', function() { setView('bottom'); });
+            document.getElementById('reset-camera').addEventListener('click', resetCamera);
+            
+            // Setup scale slider
+            scaleSlider.addEventListener('input', function() {
+                if (model) {
+                    const value = parseFloat(this.value);
+                    model.scale.set(value, value, value);
+                    scaleValue.textContent = value.toFixed(1);
+                }
+            });
+            
+            // Setup position Y slider
+            positionYSlider.addEventListener('input', function() {
+                if (model) {
+                    const value = parseFloat(this.value);
+                    model.position.y = defaultModelPosition.y + value;
+                    positionYValue.textContent = value.toFixed(1);
+                }
+            });
+            
+            // Setup rotation buttons
+            document.getElementById('rotate-x-plus').addEventListener('click', function() {
+                if (model) model.rotation.x += Math.PI / 12;
+            });
+            document.getElementById('rotate-x-minus').addEventListener('click', function() {
+                if (model) model.rotation.x -= Math.PI / 12;
+            });
+            document.getElementById('rotate-y-plus').addEventListener('click', function() {
+                if (model) model.rotation.y += Math.PI / 12;
+            });
+            document.getElementById('rotate-y-minus').addEventListener('click', function() {
+                if (model) model.rotation.y -= Math.PI / 12;
+            });
+            document.getElementById('rotate-z-plus').addEventListener('click', function() {
+                if (model) model.rotation.z += Math.PI / 12;
+            });
+            document.getElementById('rotate-z-minus').addEventListener('click', function() {
+                if (model) model.rotation.z -= Math.PI / 12;
+            });
+            
+            // Setup reset model button
+            document.getElementById('reset-model').addEventListener('click', function() {
+                if (model) {
+                    model.position.copy(defaultModelPosition);
+                    model.rotation.copy(defaultModelRotation);
+                    model.scale.copy(defaultModelScale);
+                    
+                    // Reset UI controls
+                    scaleSlider.value = 1;
+                    scaleValue.textContent = '1.0';
+                    positionYSlider.value = 0;
+                    positionYValue.textContent = '0.0';
+                    autoRotateCheckbox.checked = false;
+                }
+            });
+        }
+        
+        function setView(view) {
+            if (!model) return;
+            
+            const box = new THREE.Box3().setFromObject(model);
+            const size = box.getSize(new THREE.Vector3());
+            const center = box.getCenter(new THREE.Vector3());
+            const maxDim = Math.max(size.x, size.y, size.z);
+            const fov = camera.fov * (Math.PI / 180);
+            let cameraZ = Math.abs(maxDim / Math.sin(fov / 2));
+
+            let targetPos, lookAt;
+            switch (view) {
+                case 'front':
+                    targetPos = new THREE.Vector3(center.x, center.y, center.z + cameraZ * 1.5);
+                    break;
+                case 'back':
+                    targetPos = new THREE.Vector3(center.x, center.y, center.z - cameraZ * 1.5);
+                    break;
+                case 'left':
+                    targetPos = new THREE.Vector3(center.x - cameraZ * 1.5, center.y, center.z);
+                    break;
+                case 'right':
+                    targetPos = new THREE.Vector3(center.x + cameraZ * 1.5, center.y, center.z);
+                    break;
+                case 'top':
+                    targetPos = new THREE.Vector3(center.x, center.y + cameraZ * 1.5, center.z);
+                    break;
+                case 'bottom':
+                    targetPos = new THREE.Vector3(center.x, center.y - cameraZ * 1.5, center.z);
+                    break;
+            }
+            lookAt = center;
+
+            cameraMove(targetPos, lookAt);
+        }
+        
+        function cameraMove(targetPos, lookAt) {
+            // Move camera to target position and look at target
+            const duration = 1000; // 1 second
+            const clock = new THREE.Clock();
+            clock.start();
+            
+            const startPosition = camera.position.clone();
+            const startTarget = controls.target.clone();
+            
+            function updateCamera() {
+                const elapsed = clock.getElapsedTime() * 1000;
+                const progress = Math.min(elapsed / duration, 1);
+                const easeProgress = progress < 0.5 
+                    ? 2 * progress * progress 
+                    : 1 - Math.pow(-2 * progress + 2, 2) / 2; // Ease in-out quad
+                
+                camera.position.lerpVectors(startPosition, targetPos, easeProgress);
+                controls.target.lerpVectors(startTarget, lookAt, easeProgress);
+                controls.update();
+                
+                if (progress < 1) {
+                    requestAnimationFrame(updateCamera);
+                }
+            }
+            
+            updateCamera();
+        }
+
+        // Reset camera
+        function resetCamera() {
+            camera.position.copy(defaultCameraPosition);
+            controls.target.copy(defaultTargetPosition);
+            camera.lookAt(defaultTargetPosition);
+            controls.update();
+        }
+    </script>
+</body>
+</html> 

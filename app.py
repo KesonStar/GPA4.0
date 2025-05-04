@@ -74,7 +74,8 @@ def get_all_projects():
                     # Find first .glb file
                     for file in os.listdir(model_dir):
                         if file.endswith(".glb"):
-                            model_filename = os.path.join(folder, "3d", file)
+                            # Store full path with timestamp for correct routing
+                            model_filename = f"{folder}/3d/{file}"
                             break
                 
                 projects.append(Project(folder, thumbnail_name, model_filename))
@@ -590,30 +591,64 @@ def get_model_progress():
             "message": f"Error getting model progress: {str(e)}"
         }), 500
 
-@app.route('/get-model/<filename>')
-def get_model(filename):
-    if not session_save_path:
-        return "No active session", 400
-    
-    model_path = os.path.join(session_save_path, '3d', filename)
-    
-    if not os.path.exists(model_path):
-        return "Model not found", 404
-    
-    return send_file(model_path, mimetype='model/gltf-binary')
-
-@app.route('/view-model/<filename>')
+@app.route('/view-model/<path:filename>')
 def view_model(filename):
-    if not session_save_path:
-        return "No active session", 400
+    # For paths coming from dashboard with project timestamp/path
+    if '/' in filename:
+        # Extract timestamp and model path
+        parts = filename.split('/')
+        timestamp = parts[0]
+        model_filename = '/'.join(parts[1:])
+        
+        # Set model path
+        model_dir = os.path.join("models", timestamp)
+        model_path = os.path.join(model_dir, model_filename)
+        
+        if not os.path.exists(model_path):
+            return "Model not found", 404
+        
+        # Render the glass model viewer template
+        return render_template('glass_model_viewer.html', model_path=f"/get-model/{filename}")
     
-    model_path = os.path.join(session_save_path, '3d', filename)
+    # For current session (backwards compatibility)
+    else:
+        if not session_save_path:
+            return "No active session", 400
+        
+        model_path = os.path.join(session_save_path, '3d', filename)
+        
+        if not os.path.exists(model_path):
+            return "Model not found", 404
+        
+        # Render the glass model viewer template
+        return render_template('glass_model_viewer.html', model_path=f"/get-model/{filename}")
+
+@app.route('/get-model/<path:filename>')
+def get_model(filename):
+    # For paths with timestamp/model format
+    if '/' in filename:
+        parts = filename.split('/')
+        timestamp = parts[0]
+        model_filename = '/'.join(parts[1:])
+        
+        model_path = os.path.join("models", timestamp, model_filename)
+        
+        if not os.path.exists(model_path):
+            return "Model not found", 404
+        
+        return send_file(model_path, mimetype='model/gltf-binary')
     
-    if not os.path.exists(model_path):
-        return "Model not found", 404
-    
-    # Render the 3D model viewer template with the model path
-    return render_template('model_viewer.html', model_path=f"/get-model/{filename}")
+    # For current session (backwards compatibility)
+    else:
+        if not session_save_path:
+            return "No active session", 400
+        
+        model_path = os.path.join(session_save_path, '3d', filename)
+        
+        if not os.path.exists(model_path):
+            return "Model not found", 404
+        
+        return send_file(model_path, mimetype='model/gltf-binary')
 
 @app.route('/rename-project', methods=['POST'])
 def rename_project():
@@ -650,4 +685,4 @@ if __name__ == '__main__':
     if not os.path.exists("prompts"):
          gpt_4_api.create_default_prompts()
     
-    app.run(debug=True) 
+    app.run(debug=True, port=8080) 

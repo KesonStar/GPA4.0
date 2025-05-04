@@ -387,7 +387,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         // Auto-hide the reminder after 8 seconds
                         setTimeout(() => {
                             modelReminder.style.display = 'none';
-                        }, 8000);
+                        }, 3000);
                     }
                 } else {
                     // Show error message

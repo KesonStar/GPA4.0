@@ -242,7 +242,7 @@ def create_image():
             appearance_design = appearance_summary  # Use the in-memory version if file not found
         
         # Create prompt for image generation
-        prompt = f"There should not be any text in the image. {appearance_design}"
+        prompt = f"There should not be any text in the image. The image should be a single perspective product image. {appearance_design}"
         
         # Call OpenAI to generate image
         result = openai_client.images.generate(

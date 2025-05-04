@@ -69,8 +69,10 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         // Handle image creation request
         else if (message.toLowerCase() === "create image") {
-            loadingText.textContent = "Preparing to generate image...";
+            // Show the main loading container while preparing the transition
+            loadingText.textContent = "Generating initial image..."; // Update text here
             loadingContainer.style.display = 'flex';
+            // The image-specific loading indicator will show once the viewer appears
         }
         // Handle image design finished request
         else if (currentPhase === 4 && message.toLowerCase() === "image design finished") {
@@ -218,20 +220,18 @@ document.addEventListener('DOMContentLoaded', function () {
         imageLoadingText.textContent = "Generating initial image...";
         imageLoading.style.display = 'flex';
 
+        // Keep the main loading container visible during the entire process
+        loadingText.textContent = "Generating initial image...";
+        loadingContainer.style.display = 'flex';
+
         // Transition from product intro to image viewer
         productIntroContainer.classList.add('fade-out');
         productIntroContainer.classList.remove('fade-in');
 
         setTimeout(() => {
             productIntroContainer.style.display = 'none';
-            imageViewerContainer.style.display = 'block';
-
-            // Trigger reflow
-            void imageViewerContainer.offsetWidth;
-
-            // Fade in image viewer
-            imageViewerContainer.classList.add('fade-in');
-            imageViewerContainer.classList.remove('fade-out');
+            // Don't show image viewer immediately
+            // imageViewerContainer.style.display = 'block'; 
 
             // Call API to create image
             fetch('/create-image', {
@@ -242,12 +242,21 @@ document.addEventListener('DOMContentLoaded', function () {
             })
                 .then(response => response.json())
                 .then(data => {
-                    // Hide image loading indicator
+                    // Only hide loading indicators after successful image creation
+                    loadingContainer.style.display = 'none';
                     imageLoading.style.display = 'none';
 
                     if (data.success) {
-                        // Load the new image
+                        // Set the image source first
                         productImage.src = data.image_path;
+
+                        // Now show and fade in the image viewer container
+                        imageViewerContainer.style.display = 'block';
+                        void imageViewerContainer.offsetWidth; // Trigger reflow
+                        imageViewerContainer.classList.add('fade-in');
+                        imageViewerContainer.classList.remove('fade-out');
+
+                        // Animate the image appearance
                         productImage.classList.add('image-appear');
 
                         // Add system message to chat
@@ -255,12 +264,18 @@ document.addEventListener('DOMContentLoaded', function () {
                     } else {
                         // Show error message
                         addMessageToChat('assistant', `Error creating image: ${data.message}`, true);
+                        // If creation failed, maybe hide the image viewer or show a placeholder?
+                        // For now, just keep it hidden if it wasn't shown yet
+                        imageViewerContainer.style.display = 'none';
                     }
                 })
                 .catch(error => {
                     console.error('Error:', error);
+                    loadingContainer.style.display = 'none';
                     imageLoading.style.display = 'none';
                     addMessageToChat('assistant', 'There was an error generating the image. Please try again.', true);
+                    // Keep viewer hidden on error
+                    imageViewerContainer.style.display = 'none';
                 });
         }, 800);
     }

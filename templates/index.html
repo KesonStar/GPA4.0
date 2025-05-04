@@ -40,12 +40,12 @@
             </div>
         </div>
 
-        <!-- Right side: Summary display -->
+        <!-- Right side: Summary display and Image viewer -->
         <div class="summary-section">
             <!-- Loading indicator -->
             <div class="loading-container" id="loading-container" style="display: none;">
                 <div class="loading-spinner"></div>
-                <div class="loading-text">Generating summary...</div>
+                <div class="loading-text" id="loading-text">Generating summary...</div>
             </div>
 
             <!-- Appearance summary section -->
@@ -71,6 +71,26 @@
                 <h2>Product Introduction</h2>
                 <div class="product-intro-content" id="product-intro-content">
                     <!-- Product introduction will be displayed here -->
+                </div>
+                <div class="intro-footer">
+                    <p class="intro-tip">Type <strong>'create image'</strong> in the chat to generate a 2D product image</p>
+                </div>
+            </div>
+            
+            <!-- Image viewer section -->
+            <div class="image-viewer-container" id="image-viewer-container" style="display: none;">
+                <h2>Product Image</h2>
+                <div class="image-content" id="image-content">
+                    <img id="product-image" src="" alt="Product Image">
+                </div>
+                <div class="image-status" id="image-status">
+                    <p class="status-text">You can provide editing instructions in the chat.</p>
+                    <p class="status-text">Type <strong>'image design finished'</strong> when you're satisfied with the image.</p>
+                </div>
+                <!-- Image loading indicator -->
+                <div class="image-loading" id="image-loading" style="display: none;">
+                    <div class="loading-spinner"></div>
+                    <div class="loading-text" id="image-loading-text">Generating image...</div>
                 </div>
             </div>
         </div>

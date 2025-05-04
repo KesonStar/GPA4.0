@@ -598,3 +598,35 @@ with open(current_image_path, "rb") as image_file:
 image_base64 = result.data[0].b64_json
 image_bytes = base64.b64decode(image_base64)
 ```
+
+Reference code for gemini-image editing.
+```python
+from google import genai
+from google.genai import types
+from PIL import Image
+from io import BytesIO
+
+import PIL.Image
+
+image = PIL.Image.open('/path/to/image.png')
+
+client = genai.Client(api_key="AIzaSyC_UzB4eXWc03oYVqHW8lfURigw5xDAuGM")
+
+text_input = ('Hi, This is a picture of me.'
+            'Can you add a llama next to me?',)
+
+response = client.models.generate_content(
+    model="gemini-2.0-flash-exp-image-generation",
+    contents=[text_input, image],
+    config=types.GenerateContentConfig(
+      response_modalities=['TEXT', 'IMAGE']
+    )
+)
+
+for part in response.candidates[0].content.parts:
+  if part.text is not None:
+    print(part.text)
+  elif part.inline_data is not None:
+    image = Image.open(BytesIO(part.inline_data.data))
+    image.show()
+```

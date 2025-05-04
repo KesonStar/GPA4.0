@@ -1,8 +1,14 @@
-from flask import Flask, render_template, request, jsonify
-import gpt_4_api
+from flask import Flask, render_template, request, jsonify, send_file
+import _1dto1d as gpt_4_api
 import os
 import datetime  # Add datetime import
+import base64
+from io import BytesIO
 from dotenv import load_dotenv
+from openai import OpenAI
+from google import genai
+from google.genai import types
+from PIL import Image
 
 # Load environment variables
 load_dotenv()
@@ -17,6 +23,13 @@ commercial_summary = ""
 product_introduction = ""
 current_phase = 0
 session_save_path = None  # Add global variable for save path
+
+# Initialize API clients
+openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+gemini_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY", "AIzaSyC_UzB4eXWc03oYVqHW8lfURigw5xDAuGM"))
+
+# Global variable to store the current image path
+current_image_path = None
 
 @app.route('/')
 def index():
@@ -160,12 +173,228 @@ def chat():
                 "phase": current_phase
             })
     
-    # Phase 3: Already completed
+    # Phase 3: Product Introduction
+    elif current_phase == 3:
+        # Check if user wants to create an image
+        if user_input.lower() == "create image":
+            # Move to Phase 4 (Image Generation)
+            current_phase = 4
+            
+            return jsonify({
+                "response": "Starting image generation for your product. Please wait while I create the initial image.",
+                "phase": current_phase,
+                "action": "create_image"
+            })
+        else:
+            return jsonify({
+                "response": "The product introduction has been completed. Type 'create image' to generate a 2D image of your product.",
+                "phase": current_phase
+            })
+    
+    # Phase 4: Image Generation and Editing
+    elif current_phase == 4:
+        # Handle image editing commands
+        if user_input.lower() == "image design finished":
+            # Final image processing
+            response_text = "Processing your final image with higher resolution..."
+            
+            return jsonify({
+                "response": response_text,
+                "phase": current_phase,
+                "action": "finalize_image"
+            })
+        else:
+            # Regular image editing
+            return jsonify({
+                "response": f"Editing the image with your instructions: {user_input}",
+                "phase": current_phase,
+                "action": "edit_image",
+                "edit_prompt": user_input
+            })
+    
+    # If we've gone past all phases
     else:
         return jsonify({
             "response": "The product design process has been completed. Refresh the page to start a new design.",
             "phase": current_phase
         })
+
+@app.route('/create-image', methods=['POST'])
+def create_image():
+    global session_save_path, current_image_path, appearance_summary
+    
+    # Create 2d directory if it doesn't exist
+    image_dir = os.path.join(session_save_path, '2d')
+    os.makedirs(image_dir, exist_ok=True)
+    
+    try:
+        # Read appearance design summary for the prompt
+        appearance_summary_path = None
+        for file in os.listdir(os.path.join(session_save_path, '1d')):
+            if file.startswith('appearance_design_summary_'):
+                appearance_summary_path = os.path.join(session_save_path, '1d', file)
+                break
+        
+        if appearance_summary_path:
+            with open(appearance_summary_path, 'r') as f:
+                appearance_design = f.read()
+        else:
+            appearance_design = appearance_summary  # Use the in-memory version if file not found
+        
+        # Create prompt for image generation
+        prompt = f"There should not be any text in the image. {appearance_design}"
+        
+        # Call OpenAI to generate image
+        result = openai_client.images.generate(
+            model="gpt-image-1",
+            prompt=prompt,
+            quality="low"  # Start with low quality for faster generation
+        )
+        
+        image_base64 = result.data[0].b64_json
+        image_bytes = base64.b64decode(image_base64)
+        
+        # Save the image
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        image_filename = f"product_image_{timestamp}.png"
+        current_image_path = os.path.join(image_dir, image_filename)
+        
+        with open(current_image_path, 'wb') as f:
+            f.write(image_bytes)
+        
+        # Return the image
+        return jsonify({
+            "success": True,
+            "message": "Image created successfully",
+            "image_path": f"/get-image/{image_filename}"
+        })
+    
+    except Exception as e:
+        print(f"Error creating image: {e}")
+        return jsonify({
+            "success": False,
+            "message": f"Error creating image: {str(e)}"
+        }), 500
+
+@app.route('/edit-image', methods=['POST'])
+def edit_image():
+    global current_image_path, session_save_path
+    
+    if not current_image_path or not os.path.exists(current_image_path):
+        return jsonify({"success": False, "message": "No image exists to edit"}), 400
+    
+    data = request.json
+    prompt = data.get('prompt', '')
+    
+    if not prompt:
+        return jsonify({"success": False, "message": "No edit prompt provided"}), 400
+    
+    try:
+        # Load the current image
+        image = Image.open(current_image_path)
+        
+        # Call Gemini API to edit the image
+        response = gemini_client.models.generate_content(
+            model="gemini-2.0-flash-exp-image-generation",
+            contents=[prompt, image],
+            config=types.GenerateContentConfig(
+                response_modalities=['TEXT', 'IMAGE']
+            )
+        )
+        
+        # Process the response
+        image_data = None
+        text_response = None
+        
+        for part in response.candidates[0].content.parts:
+            if part.text is not None:
+                text_response = part.text
+            elif part.inline_data is not None:
+                image_data = part.inline_data.data
+        
+        if image_data:
+            # Save the edited image
+            image_dir = os.path.join(session_save_path, '2d')
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            image_filename = f"product_image_edited_{timestamp}.png"
+            current_image_path = os.path.join(image_dir, image_filename)
+            
+            with open(current_image_path, 'wb') as f:
+                f.write(image_data)
+            
+            return jsonify({
+                "success": True,
+                "message": "Image edited successfully",
+                "text_response": text_response or "Image edited based on your instructions.",
+                "image_path": f"/get-image/{image_filename}"
+            })
+        else:
+            return jsonify({
+                "success": False,
+                "message": "No image was generated from the edit"
+            }), 500
+    
+    except Exception as e:
+        print(f"Error editing image: {e}")
+        return jsonify({
+            "success": False,
+            "message": f"Error editing image: {str(e)}"
+        }), 500
+
+@app.route('/finalize-image', methods=['POST'])
+def finalize_image():
+    global current_image_path, session_save_path
+    
+    if not current_image_path or not os.path.exists(current_image_path):
+        return jsonify({"success": False, "message": "No image exists to finalize"}), 400
+    
+    try:
+        # Read the current image
+        with open(current_image_path, "rb") as image_file:
+            # Call OpenAI to generate higher resolution image
+            result = openai_client.images.edit(
+                model="gpt-image-1",
+                image=image_file,
+                prompt="Keep the image completely consistent and generate a higher resolution image"
+            )
+        
+        image_base64 = result.data[0].b64_json
+        image_bytes = base64.b64decode(image_base64)
+        
+        # Save the final image
+        image_dir = os.path.join(session_save_path, '2d')
+        final_image_path = os.path.join(image_dir, "Product 2d Image.png")
+        
+        with open(final_image_path, 'wb') as f:
+            f.write(image_bytes)
+        
+        # Update current image path
+        current_image_path = final_image_path
+        
+        return jsonify({
+            "success": True,
+            "message": "Final high-resolution image created successfully",
+            "image_path": "/get-image/Product 2d Image.png"
+        })
+    
+    except Exception as e:
+        print(f"Error finalizing image: {e}")
+        return jsonify({
+            "success": False,
+            "message": f"Error finalizing image: {str(e)}"
+        }), 500
+
+@app.route('/get-image/<filename>')
+def get_image(filename):
+    if not session_save_path:
+        return "No active session", 400
+    
+    image_path = os.path.join(session_save_path, '2d', filename)
+    
+    if not os.path.exists(image_path):
+        return "Image not found", 404
+    
+    return send_file(image_path, mimetype='image/png')
 
 if __name__ == '__main__':
     # Create directories if they don't exist (Keep static/templates for Flask)

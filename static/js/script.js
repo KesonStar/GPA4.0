@@ -11,6 +11,11 @@ document.addEventListener('DOMContentLoaded', function () {
     const productIntroContainer = document.getElementById('product-intro-container');
     const productIntroContent = document.getElementById('product-intro-content');
     const loadingContainer = document.getElementById('loading-container');
+    const loadingText = document.getElementById('loading-text');
+    const imageViewerContainer = document.getElementById('image-viewer-container');
+    const productImage = document.getElementById('product-image');
+    const imageLoading = document.getElementById('image-loading');
+    const imageLoadingText = document.getElementById('image-loading-text');
 
     // Current phase
     let currentPhase = 1;
@@ -59,7 +64,23 @@ document.addEventListener('DOMContentLoaded', function () {
         if (message.toLowerCase() === "appearance design completed" ||
             message.toLowerCase() === "commercial application design finished." ||
             message.toLowerCase() === "generate introduction.") {
+            loadingText.textContent = "Generating summary...";
             loadingContainer.style.display = 'flex';
+        }
+        // Handle image creation request
+        else if (message.toLowerCase() === "create image") {
+            loadingText.textContent = "Preparing to generate image...";
+            loadingContainer.style.display = 'flex';
+        }
+        // Handle image design finished request
+        else if (currentPhase === 4 && message.toLowerCase() === "image design finished") {
+            imageLoadingText.textContent = "Processing final image...";
+            imageLoading.style.display = 'flex';
+        }
+        // Regular image editing in phase 4
+        else if (currentPhase === 4) {
+            imageLoadingText.textContent = "Editing image...";
+            imageLoading.style.display = 'flex';
         }
 
         // Send message to server
@@ -74,7 +95,7 @@ document.addEventListener('DOMContentLoaded', function () {
         })
             .then(response => response.json())
             .then(data => {
-                // Hide loading indicator
+                // Hide general loading indicator
                 loadingContainer.style.display = 'none';
 
                 // Remove generating indicator
@@ -154,6 +175,19 @@ document.addEventListener('DOMContentLoaded', function () {
                     }, 800);
                 }
 
+                // Handle image creation action
+                if (data.action === "create_image") {
+                    createImage();
+                }
+                // Handle image editing action
+                else if (data.action === "edit_image") {
+                    editImage(data.edit_prompt);
+                }
+                // Handle image finalization action
+                else if (data.action === "finalize_image") {
+                    finalizeImage();
+                }
+
                 // Re-enable input
                 userInput.disabled = false;
                 sendButton.disabled = false;
@@ -162,8 +196,10 @@ document.addEventListener('DOMContentLoaded', function () {
             .catch(error => {
                 console.error('Error:', error);
 
-                // Hide loading indicator
+                // Hide loading indicators
                 loadingContainer.style.display = 'none';
+                imageLoading.style.display = 'none';
+
                 // Remove generating indicator
                 removeGeneratingIndicator(generatingMessageId);
 
@@ -173,6 +209,152 @@ document.addEventListener('DOMContentLoaded', function () {
                 userInput.disabled = false;
                 sendButton.disabled = false;
                 userInput.focus();
+            });
+    }
+
+    // Function to create the initial image
+    function createImage() {
+        // Show image loading indicator
+        imageLoadingText.textContent = "Generating initial image...";
+        imageLoading.style.display = 'flex';
+
+        // Transition from product intro to image viewer
+        productIntroContainer.classList.add('fade-out');
+        productIntroContainer.classList.remove('fade-in');
+
+        setTimeout(() => {
+            productIntroContainer.style.display = 'none';
+            imageViewerContainer.style.display = 'block';
+
+            // Trigger reflow
+            void imageViewerContainer.offsetWidth;
+
+            // Fade in image viewer
+            imageViewerContainer.classList.add('fade-in');
+            imageViewerContainer.classList.remove('fade-out');
+
+            // Call API to create image
+            fetch('/create-image', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            })
+                .then(response => response.json())
+                .then(data => {
+                    // Hide image loading indicator
+                    imageLoading.style.display = 'none';
+
+                    if (data.success) {
+                        // Load the new image
+                        productImage.src = data.image_path;
+                        productImage.classList.add('image-appear');
+
+                        // Add system message to chat
+                        addMessageToChat('assistant', 'Image has been created. You can now provide instructions to edit it, or type "image design finished" when you\'re done.', true);
+                    } else {
+                        // Show error message
+                        addMessageToChat('assistant', `Error creating image: ${data.message}`, true);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    imageLoading.style.display = 'none';
+                    addMessageToChat('assistant', 'There was an error generating the image. Please try again.', true);
+                });
+        }, 800);
+    }
+
+    // Function to edit the image
+    function editImage(prompt) {
+        // Show image loading
+        imageLoadingText.textContent = "Editing image...";
+        imageLoading.style.display = 'flex';
+
+        // Call API to edit image
+        fetch('/edit-image', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                prompt: prompt
+            }),
+        })
+            .then(response => response.json())
+            .then(data => {
+                // Hide image loading indicator
+                imageLoading.style.display = 'none';
+
+                if (data.success) {
+                    // Remove current image appear class
+                    productImage.classList.remove('image-appear');
+
+                    // Force reflow
+                    void productImage.offsetWidth;
+
+                    // Update image source and add animation
+                    productImage.src = data.image_path;
+                    productImage.classList.add('image-appear');
+
+                    // Add system message to chat
+                    if (data.text_response) {
+                        addMessageToChat('assistant', data.text_response, true);
+                    } else {
+                        addMessageToChat('assistant', 'Image has been edited according to your instructions.', true);
+                    }
+                } else {
+                    // Show error message
+                    addMessageToChat('assistant', `Error editing image: ${data.message}`, true);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                imageLoading.style.display = 'none';
+                addMessageToChat('assistant', 'There was an error editing the image. Please try again.', true);
+            });
+    }
+
+    // Function to finalize the image
+    function finalizeImage() {
+        // Show image loading
+        imageLoadingText.textContent = "Finalizing high resolution image...";
+        imageLoading.style.display = 'flex';
+
+        // Call API to finalize image
+        fetch('/finalize-image', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        })
+            .then(response => response.json())
+            .then(data => {
+                // Hide image loading indicator
+                imageLoading.style.display = 'none';
+
+                if (data.success) {
+                    // Remove current image appear class
+                    productImage.classList.remove('image-appear');
+
+                    // Force reflow
+                    void productImage.offsetWidth;
+
+                    // Update image source and add animation
+                    productImage.src = data.image_path + '?' + new Date().getTime(); // Add timestamp to prevent caching
+                    productImage.classList.add('image-appear');
+
+                    // Add system message to chat
+                    addMessageToChat('assistant', 'Final high-resolution image has been created. Your product design is now complete!', true);
+                } else {
+                    // Show error message
+                    addMessageToChat('assistant', `Error finalizing image: ${data.message}`, true);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                imageLoading.style.display = 'none';
+                addMessageToChat('assistant', 'There was an error finalizing the image. Please try again.', true);
             });
     }
 
@@ -248,28 +430,29 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
-    // Function to scroll chat to bottom
     function scrollToBottom() {
         chatMessages.scrollTop = chatMessages.scrollHeight;
     }
 
-    // Function to update phase indicator
     function updatePhaseIndicator() {
         switch (currentPhase) {
             case 1:
-                phaseLabel.textContent = 'Phase 1: Appearance Design';
+                phaseLabel.textContent = "Phase 1: Appearance Design";
                 break;
             case 2:
-                phaseLabel.textContent = 'Phase 2: Commercial Application Design';
+                phaseLabel.textContent = "Phase 2: Commercial Application";
                 break;
             case 2.5:
-                phaseLabel.textContent = 'Phase 2.5: Prepare for Introduction';
+                phaseLabel.textContent = "Phase 2.5: Introduction Preparation";
                 break;
             case 3:
-                phaseLabel.textContent = 'Phase 3: Product Introduction';
+                phaseLabel.textContent = "Phase 3: Product Introduction";
+                break;
+            case 4:
+                phaseLabel.textContent = "Phase 4: Image Design";
                 break;
             default:
-                phaseLabel.textContent = 'Product Design Process';
+                phaseLabel.textContent = "Product Design Assistant";
         }
     }
 }); 

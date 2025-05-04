@@ -31,7 +31,9 @@ body {
 .summary-section,
 .summary-container,
 .product-intro-container,
-.loading-container {
+.image-viewer-container,
+.loading-container,
+.image-loading {
     background: rgba(255, 255, 255, 0.15);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
@@ -181,7 +183,8 @@ body {
 }
 
 .summary-container,
-.product-intro-container {
+.product-intro-container,
+.image-viewer-container {
     position: absolute;
     top: 0;
     left: 0;
@@ -249,11 +252,31 @@ body {
 
 /* Fade in/out animations */
 .fade-in {
-    opacity: 1 !important;
+    animation: fadeIn 0.8s forwards;
 }
 
 .fade-out {
-    opacity: 0 !important;
+    animation: fadeOut 0.8s forwards;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes fadeOut {
+    from {
+        opacity: 1;
+    }
+
+    to {
+        opacity: 0;
+    }
 }
 
 /* Markdown Styling */
@@ -344,4 +367,82 @@ th {
     .summary-section {
         margin-bottom: 0;
     }
+}
+
+/* Image viewer styles */
+.image-viewer-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.image-content {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    margin: 20px 0;
+    flex: 1;
+}
+
+#product-image {
+    max-width: 90%;
+    max-height: 60vh;
+    object-fit: contain;
+    border-radius: 10px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    transition: all 0.3s ease;
+}
+
+.image-status {
+    text-align: center;
+    margin-top: 15px;
+    color: #333;
+}
+
+.status-text {
+    margin: 5px 0;
+}
+
+.image-loading {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 30px;
+    border-radius: 15px;
+    z-index: 20;
+}
+
+.intro-footer {
+    margin-top: 20px;
+    text-align: center;
+    padding: 10px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 8px;
+}
+
+.intro-tip {
+    font-style: italic;
+    color: #333;
+}
+
+/* Animation for the image */
+@keyframes imageAppear {
+    from {
+        opacity: 0;
+        transform: scale(0.8);
+    }
+
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.image-appear {
+    animation: imageAppear 0.5s forwards;
 }

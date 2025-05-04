@@ -86,11 +86,44 @@
                 <div class="image-status" id="image-status">
                     <p class="status-text">You can provide editing instructions in the chat.</p>
                     <p class="status-text">Type <strong>'image design finished'</strong> when you're satisfied with the image.</p>
+                    <p class="status-text">After finalizing, type <strong>'create model'</strong> to generate a 3D model of your product.</p>
                 </div>
-                <!-- Image loading indicator -->
+                <!-- Image-specific loading indicator -->
                 <div class="image-loading" id="image-loading" style="display: none;">
                     <div class="loading-spinner"></div>
                     <div class="loading-text" id="image-loading-text">Generating image...</div>
+                </div>
+
+                <!-- 3D Model creation reminder displayed after finalizing image -->
+                <div class="model-reminder" id="model-reminder" style="display: none;">
+                    <div class="reminder-content">
+                        <h3>Image Finalized!</h3>
+                        <p>Your product image has been successfully created.</p>
+                        <p>Type <strong>'create model'</strong> in the chat to generate a 3D model of your product.</p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 3D Model viewer container -->
+            <div class="model-viewer-container" id="model-viewer-container" style="display: none;">
+                <h2>Product 3D Model</h2>
+                <div class="model-content" id="model-content">
+                    <iframe id="model-iframe" src="" width="100%" height="100%" frameborder="0"></iframe>
+                </div>
+                <div class="model-status" id="model-status">
+                    <p class="status-text">The 3D model of your product is being displayed above.</p>
+                    <p class="status-text">You can interact with the model directly in the viewer.</p>
+                </div>
+                <!-- 3D Model loading indicator -->
+                <div class="model-loading" id="model-loading" style="display: none;">
+                    <div class="loading-spinner"></div>
+                    <div class="loading-text" id="model-loading-text">Generating 3D model...</div>
+                    <div class="progress-container">
+                        <div class="progress-bar" id="model-progress-bar">
+                            <div class="progress" id="model-progress" style="width: 0%"></div>
+                        </div>
+                        <div class="progress-text" id="model-progress-text">0%</div>
+                    </div>
                 </div>
             </div>
         </div>

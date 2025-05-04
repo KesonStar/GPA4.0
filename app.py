@@ -1,5 +1,6 @@
 from flask import Flask, render_template, request, jsonify, send_file
 import _1dto1d as gpt_4_api
+import _2dto3d as meshy_api  # Import the Meshy API module
 import os
 import datetime  # Add datetime import
 import base64
@@ -193,29 +194,49 @@ def chat():
     
     # Phase 4: Image Generation and Editing
     elif current_phase == 4:
-        # Handle image editing commands
         if user_input.lower() == "image design finished":
-            # Final image processing
-            response_text = "Processing your final image with higher resolution..."
-            
+            # Final image processing: Set phase to 5 and trigger finalize action
+            current_phase = 5
             return jsonify({
-                "response": response_text,
-                "phase": current_phase,
+                "response": "Processing your final image with higher resolution...",
+                "phase": current_phase, # Send phase 5
                 "action": "finalize_image"
             })
+        # Explicitly check for 'create model' in phase 4 and guide the user
+        elif user_input.lower() == "create model":
+             return jsonify({
+                "response": "Please finalize the image design first by typing 'image design finished'.",
+                "phase": current_phase # Stay in phase 4
+             })
         else:
-            # Regular image editing
+            # Any other input in Phase 4 is treated as an edit request
             return jsonify({
                 "response": f"Editing the image with your instructions: {user_input}",
-                "phase": current_phase,
+                "phase": current_phase, # Stay in phase 4
                 "action": "edit_image",
                 "edit_prompt": user_input
             })
-    
-    # If we've gone past all phases
+
+    # Phase 5: Post-Finalization / 3D Model Creation
+    elif current_phase == 5:
+        if user_input.lower() == "create model":
+            # Correctly trigger model creation in Phase 5
+            return jsonify({
+                "response": "Starting 3D model generation for your product. Please wait while I create the model.",
+                "phase": current_phase, # Stay in phase 5
+                "action": "create_model"
+            })
+        else:
+            # Default response for phase 5 if not 'create model'
+            return jsonify({
+                "response": "Image finalized. Type 'create model' to generate the 3D model.",
+                "phase": current_phase # Stay in phase 5
+            })
+
+    # If we've gone past all phases (or unexpected state)
     else:
         return jsonify({
-            "response": "The product design process has been completed. Refresh the page to start a new design.",
+            "response": "The product design process has been completed or is in an unexpected state. Refresh the page to start a new design.",
             "phase": current_phase
         })
 
@@ -395,6 +416,144 @@ def get_image(filename):
         return "Image not found", 404
     
     return send_file(image_path, mimetype='image/png')
+
+@app.route('/create-model', methods=['POST'])
+def create_model():
+    global session_save_path
+    
+    # Create 3d directory if it doesn't exist
+    model_dir = os.path.join(session_save_path, '3d')
+    os.makedirs(model_dir, exist_ok=True)
+    
+    try:
+        # Get the path to the 2D image
+        image_path = os.path.join(session_save_path, '2d', 'Product 2d Image.png')
+        
+        if not os.path.exists(image_path):
+            return jsonify({
+                "success": False,
+                "message": "Product image not found"
+            }), 400
+        
+        # Create the task in Meshy API and get the task ID
+        task_id = meshy_api.create_image_to_3d_task(image_path)
+        
+        # Return the task ID for progress tracking
+        return jsonify({
+            "success": True,
+            "message": "3D model creation started",
+            "task_id": task_id
+        })
+    
+    except Exception as e:
+        print(f"Error creating 3D model task: {e}")
+        return jsonify({
+            "success": False,
+            "message": f"Error creating 3D model task: {str(e)}"
+        }), 500
+
+@app.route('/download-model', methods=['POST'])
+def download_model():
+    global session_save_path
+    
+    data = request.json
+    task_id = data.get('task_id')
+    
+    if not task_id:
+        return jsonify({
+            "success": False,
+            "message": "No task ID provided"
+        }), 400
+    
+    try:
+        # Create 3d directory if it doesn't exist
+        model_dir = os.path.join(session_save_path, '3d')
+        os.makedirs(model_dir, exist_ok=True)
+        
+        # Get the task status
+        task_status = meshy_api.retrieve_task_status(task_id)
+        
+        if task_status["status"] != "SUCCEEDED":
+            return jsonify({
+                "success": False,
+                "message": f"Model is not ready. Current status: {task_status['status']}"
+            }), 400
+        
+        # Download the model
+        model_url = task_status["model_urls"]["glb"]
+        final_model_path = os.path.join(model_dir, "Product 3D Model.glb")
+        
+        # Download the model file
+        meshy_api.download_model(model_url, final_model_path)
+        
+        return jsonify({
+            "success": True,
+            "message": "3D model downloaded successfully",
+            "model_path": f"/get-model/Product 3D Model.glb"
+        })
+    
+    except Exception as e:
+        print(f"Error downloading 3D model: {e}")
+        return jsonify({
+            "success": False,
+            "message": f"Error downloading 3D model: {str(e)}"
+        }), 500
+
+@app.route('/get-model-progress', methods=['GET'])
+def get_model_progress():
+    # This route will be used to get the current progress of the model generation
+    # It will be polled periodically by the frontend
+    task_id = request.args.get('task_id')
+    
+    if not task_id:
+        return jsonify({
+            "success": False,
+            "message": "No task ID provided"
+        }), 400
+    
+    try:
+        # Get the task status from Meshy API
+        task_status = meshy_api.retrieve_task_status(task_id)
+        status = task_status["status"]
+        progress = task_status.get("progress", 0)
+        
+        return jsonify({
+            "success": True,
+            "status": status,
+            "progress": progress
+        })
+    
+    except Exception as e:
+        print(f"Error getting model progress: {e}")
+        return jsonify({
+            "success": False,
+            "message": f"Error getting model progress: {str(e)}"
+        }), 500
+
+@app.route('/get-model/<filename>')
+def get_model(filename):
+    if not session_save_path:
+        return "No active session", 400
+    
+    model_path = os.path.join(session_save_path, '3d', filename)
+    
+    if not os.path.exists(model_path):
+        return "Model not found", 404
+    
+    return send_file(model_path, mimetype='model/gltf-binary')
+
+@app.route('/view-model/<filename>')
+def view_model(filename):
+    if not session_save_path:
+        return "No active session", 400
+    
+    model_path = os.path.join(session_save_path, '3d', filename)
+    
+    if not os.path.exists(model_path):
+        return "Model not found", 404
+    
+    # Render the 3D model viewer template with the model path
+    return render_template('model_viewer.html', model_path=f"/get-model/{filename}")
 
 if __name__ == '__main__':
     # Create directories if they don't exist (Keep static/templates for Flask)

@@ -32,8 +32,10 @@ body {
 .summary-container,
 .product-intro-container,
 .image-viewer-container,
+.model-viewer-container,
 .loading-container,
-.image-loading {
+.image-loading,
+.model-loading {
     background: rgba(255, 255, 255, 0.15);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
@@ -185,7 +187,8 @@ body {
 
 .summary-container,
 .product-intro-container,
-.image-viewer-container {
+.image-viewer-container,
+.model-viewer-container {
     position: absolute;
     top: 0;
     left: 0;
@@ -448,4 +451,117 @@ th {
 
 .image-appear {
     animation: imageAppear 0.5s forwards;
+}
+
+/* 3D Model viewer styles */
+.model-viewer-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    padding: 20px;
+    overflow-y: auto;
+    opacity: 0;
+    transition: opacity 0.8s ease-in-out;
+}
+
+.model-content {
+    width: 100%;
+    height: 70vh;
+    display: flex;
+    justify-content: center;
+    margin: 20px 0;
+    flex: 1;
+}
+
+#model-iframe {
+    width: 100%;
+    height: 100%;
+    border-radius: 10px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.model-status {
+    text-align: center;
+    margin-top: 15px;
+    color: #333;
+}
+
+.model-loading {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 30px;
+    border-radius: 15px;
+    z-index: 20;
+    background: rgba(255, 255, 255, 0.3);
+}
+
+.progress-container {
+    width: 100%;
+    margin-top: 15px;
+}
+
+.progress-bar {
+    width: 300px;
+    height: 20px;
+    background-color: rgba(255, 255, 255, 0.2);
+    border-radius: 10px;
+    overflow: hidden;
+    margin: 10px auto;
+}
+
+.progress {
+    height: 100%;
+    width: 0%;
+    background-color: #3498db;
+    transition: width 0.3s ease;
+}
+
+.progress-text {
+    text-align: center;
+    font-weight: bold;
+    color: #333;
+}
+
+/* Model reminder styles */
+.model-reminder {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background-color: rgba(52, 152, 219, 0.9);
+    color: white;
+    border-radius: 15px;
+    padding: 30px;
+    z-index: 20;
+    text-align: center;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    animation: fadeIn 0.5s forwards;
+}
+
+.reminder-content h3 {
+    margin-top: 0;
+    margin-bottom: 15px;
+    font-size: 1.5em;
+    color: white;
+}
+
+.reminder-content p {
+    margin-bottom: 10px;
+    font-size: 1.1em;
+}
+
+.reminder-content p:last-child {
+    margin-top: 20px;
+    font-weight: bold;
 }

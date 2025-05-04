@@ -17,6 +17,14 @@ document.addEventListener('DOMContentLoaded', function () {
     const imageLoading = document.getElementById('image-loading');
     const imageLoadingText = document.getElementById('image-loading-text');
 
+    // Add new DOM elements for 3D model viewer
+    const modelViewerContainer = document.getElementById('model-viewer-container');
+    const modelIframe = document.getElementById('model-iframe');
+    const modelLoading = document.getElementById('model-loading');
+    const modelLoadingText = document.getElementById('model-loading-text');
+    const modelProgress = document.getElementById('model-progress');
+    const modelProgressText = document.getElementById('model-progress-text');
+
     // Current phase
     let currentPhase = 1;
     let shouldAutoScroll = true;
@@ -83,6 +91,12 @@ document.addEventListener('DOMContentLoaded', function () {
         else if (currentPhase === 4) {
             imageLoadingText.textContent = "Editing image...";
             imageLoading.style.display = 'flex';
+        }
+        // Handle create model request
+        else if (message.toLowerCase() === "create model") {
+            // Show the main loading container while preparing the transition
+            loadingText.textContent = "Preparing to generate 3D model...";
+            loadingContainer.style.display = 'flex';
         }
 
         // Send message to server
@@ -188,6 +202,10 @@ document.addEventListener('DOMContentLoaded', function () {
                 // Handle image finalization action
                 else if (data.action === "finalize_image") {
                     finalizeImage();
+                }
+                // Handle 3D model creation
+                else if (data.action === "create_model") {
+                    createModel();
                 }
 
                 // Re-enable input
@@ -360,7 +378,17 @@ document.addEventListener('DOMContentLoaded', function () {
                     productImage.classList.add('image-appear');
 
                     // Add system message to chat
-                    addMessageToChat('assistant', 'Final high-resolution image has been created. Your product design is now complete!', true);
+                    addMessageToChat('assistant', 'Final high-resolution image has been created. Your product design is now complete! Type "create model" to generate a 3D model of your product.', true);
+
+                    // Show the model reminder
+                    const modelReminder = document.getElementById('model-reminder');
+                    if (modelReminder) {
+                        modelReminder.style.display = 'block';
+                        // Auto-hide the reminder after 8 seconds
+                        setTimeout(() => {
+                            modelReminder.style.display = 'none';
+                        }, 8000);
+                    }
                 } else {
                     // Show error message
                     addMessageToChat('assistant', `Error finalizing image: ${data.message}`, true);
@@ -370,6 +398,179 @@ document.addEventListener('DOMContentLoaded', function () {
                 console.error('Error:', error);
                 imageLoading.style.display = 'none';
                 addMessageToChat('assistant', 'There was an error finalizing the image. Please try again.', true);
+            });
+    }
+
+    // Function to create 3D model
+    function createModel() {
+        // Show model loading indicator
+        modelLoadingText.textContent = "Generating 3D model...";
+        modelLoading.style.display = 'flex';
+        modelProgress.style.width = "0%";
+        modelProgressText.textContent = "0%";
+
+        // Keep the main loading container visible during the entire process
+        loadingText.textContent = "Generating 3D model...";
+        loadingContainer.style.display = 'flex';
+
+        // Transition from image viewer to model viewer
+        imageViewerContainer.classList.add('fade-out');
+        imageViewerContainer.classList.remove('fade-in');
+
+        setTimeout(() => {
+            imageViewerContainer.style.display = 'none';
+            // Don't show model viewer immediately, show only after model is created
+            // modelViewerContainer.style.display = 'block'; 
+
+            // Call API to create 3D model task
+            fetch('/create-model', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // Store the task ID for polling progress
+                        const taskId = data.task_id;
+                        // Start polling for task progress
+                        pollModelProgress(taskId);
+                    } else {
+                        // Hide loading indicators on error
+                        loadingContainer.style.display = 'none';
+                        modelLoading.style.display = 'none';
+
+                        // Show error message
+                        addMessageToChat('assistant', `Error creating 3D model task: ${data.message}`, true);
+                        // Revert to image viewer
+                        imageViewerContainer.style.display = 'block';
+                        void imageViewerContainer.offsetWidth; // Trigger reflow
+                        imageViewerContainer.classList.add('fade-in');
+                        imageViewerContainer.classList.remove('fade-out');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    loadingContainer.style.display = 'none';
+                    modelLoading.style.display = 'none';
+                    addMessageToChat('assistant', 'There was an error starting the 3D model generation. Please try again.', true);
+                    // Revert to image viewer on error
+                    imageViewerContainer.style.display = 'block';
+                    void imageViewerContainer.offsetWidth; // Trigger reflow
+                    imageViewerContainer.classList.add('fade-in');
+                    imageViewerContainer.classList.remove('fade-out');
+                });
+        }, 800);
+    }
+
+    // Function to poll for model generation progress
+    function pollModelProgress(taskId) {
+        let lastProgress = 0;
+
+        // Function to check progress of the task
+        function checkProgress() {
+            fetch(`/get-model-progress?task_id=${taskId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        const progress = data.progress;
+                        modelProgress.style.width = `${progress}%`;
+                        modelProgressText.textContent = `${Math.round(progress)}%`;
+
+                        // Update message if progress has changed significantly
+                        if (progress - lastProgress >= 10) {
+                            lastProgress = progress;
+                            addMessageToChat('assistant', `3D model generation in progress: ${Math.round(progress)}% complete`, true);
+                        }
+
+                        // If the model is complete, download it
+                        if (data.status === "SUCCEEDED") {
+                            modelLoadingText.textContent = "Downloading 3D model...";
+                            downloadModel(taskId);
+                            return; // Stop polling
+                        }
+                        // If the model generation failed, show error
+                        else if (data.status === "FAILED" || data.status === "CANCELLED") {
+                            loadingContainer.style.display = 'none';
+                            modelLoading.style.display = 'none';
+                            addMessageToChat('assistant', `The 3D model generation ${data.status.toLowerCase()}. Please try again.`, true);
+
+                            // Revert to image viewer
+                            imageViewerContainer.style.display = 'block';
+                            void imageViewerContainer.offsetWidth;
+                            imageViewerContainer.classList.add('fade-in');
+                            imageViewerContainer.classList.remove('fade-out');
+                            return; // Stop polling
+                        }
+
+                        // Continue polling
+                        setTimeout(checkProgress, 5000);
+                    } else {
+                        // Error getting progress, try again
+                        setTimeout(checkProgress, 5000);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error polling progress:', error);
+                    // Try again after delay
+                    setTimeout(checkProgress, 5000);
+                });
+        }
+
+        // Start polling
+        checkProgress();
+    }
+
+    // Function to download the completed model
+    function downloadModel(taskId) {
+        fetch('/download-model', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                task_id: taskId
+            })
+        })
+            .then(response => response.json())
+            .then(data => {
+                // Hide loading indicators
+                loadingContainer.style.display = 'none';
+                modelLoading.style.display = 'none';
+
+                if (data.success) {
+                    // Set the iframe source to the model viewer page
+                    modelIframe.src = `/view-model/Product 3D Model.glb`;
+
+                    // Now show and fade in the model viewer container
+                    modelViewerContainer.style.display = 'block';
+                    void modelViewerContainer.offsetWidth; // Trigger reflow
+                    modelViewerContainer.classList.add('fade-in');
+                    modelViewerContainer.classList.remove('fade-out');
+
+                    // Add system message to chat
+                    addMessageToChat('assistant', 'The 3D model has been created. You can now interact with it in the viewer.', true);
+                } else {
+                    // Show error message
+                    addMessageToChat('assistant', `Error downloading 3D model: ${data.message}`, true);
+                    // Revert to image viewer
+                    imageViewerContainer.style.display = 'block';
+                    void imageViewerContainer.offsetWidth; // Trigger reflow
+                    imageViewerContainer.classList.add('fade-in');
+                    imageViewerContainer.classList.remove('fade-out');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                loadingContainer.style.display = 'none';
+                modelLoading.style.display = 'none';
+                addMessageToChat('assistant', 'There was an error downloading the 3D model. Please try again.', true);
+                // Revert to image viewer on error
+                imageViewerContainer.style.display = 'block';
+                void imageViewerContainer.offsetWidth; // Trigger reflow
+                imageViewerContainer.classList.add('fade-in');
+                imageViewerContainer.classList.remove('fade-out');
             });
     }
 
@@ -465,6 +666,9 @@ document.addEventListener('DOMContentLoaded', function () {
                 break;
             case 4:
                 phaseLabel.textContent = "Phase 4: Image Design";
+                break;
+            case 5:
+                phaseLabel.textContent = "Phase 5: 3D Model Creation";
                 break;
             default:
                 phaseLabel.textContent = "Product Design Assistant";

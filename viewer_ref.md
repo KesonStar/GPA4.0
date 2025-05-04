@@ -1,3 +1,10 @@
+Reference code for importing the 3Djs library.
+```
+"three": "https://cdn.jsdelivr.net/npm/three@0.174.0/build/three.module.js",
+"three/addons/": "https://cdn.jsdelivr.net/npm/three@0.174.0/examples/jsm/"
+```
+
+
 Reference code for the 3D model viewer.
 ```html
 <!DOCTYPE html>

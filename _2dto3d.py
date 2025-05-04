@@ -3,7 +3,7 @@ import os
 import requests
 import base64
 
-meshy_api_key = "msy_QPODmXkErOFkxZmiuLFi7xawUr4l7ndar400"
+meshy_api_key = "Your Meshy API Key"
 
 def encode_image_to_base64(image_path):
     """Encode the image to a base64 string."""

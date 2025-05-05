@@ -326,17 +326,28 @@ def generate_commercial_summary(conversation, user_name):
     
     return summary
 
-def generate_product_introduction(appearance_summary, commercial_summary):
+def generate_product_introduction(appearance_summary, commercial_summary, appearance_conversation):
     """Generate final product introduction using LLM4"""
     # Create a new conversation for the introduction GPT
     intro_messages = [initialize_product_introduction_system()]
     
-    # Add summaries to the introduction request
+    # Format appearance conversation for context
+    appearance_conversation_text = ""
+    for message in appearance_conversation:
+        if message["role"] == "system":
+            continue  # Skip system messages
+        elif message["role"] == "user":
+            appearance_conversation_text += f"User: {message['content']}\n\n"
+        elif message["role"] == "assistant":
+            appearance_conversation_text += f"AI Assistant: {message['content']}\n\n"
+    
+    # Add summaries and appearance conversation to the introduction request
     intro_messages.append({
         "role": "user", 
-        "content": f"Below are two documents: 1) a product appearance design document and 2) a product commercial application document. Please synthesize these into a comprehensive product introduction:\n\n"
+        "content": f"Below are two documents: 1) a product appearance design document and 2) a product commercial application document, as well as the original appearance design conversation. Please synthesize these into a comprehensive product introduction:\n\n"
                   f"## PRODUCT APPEARANCE DESIGN DOCUMENT\n\n{appearance_summary}\n\n"
                   f"## PRODUCT COMMERCIAL APPLICATION DOCUMENT\n\n{commercial_summary}\n\n"
+                  f"## ORIGINAL APPEARANCE DESIGN CONVERSATION\n\n{appearance_conversation_text}\n\n"
                   f"Please create a polished, comprehensive product introduction that integrates both the appearance design and commercial aspects into a cohesive narrative."
     })
     
@@ -409,7 +420,7 @@ def main():
 
     # Phase 3: Product Introduction
     print("\n--- Phase 3: Product Introduction ---")
-    product_introduction = generate_product_introduction(appearance_summary, commercial_summary)
+    product_introduction = generate_product_introduction(appearance_summary, commercial_summary, appearance_conversation)
     
     # Save product introduction
     introduction_file = save_introduction_to_markdown(product_introduction, main_save_path)

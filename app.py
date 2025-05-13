@@ -377,7 +377,7 @@ def edit_image():
         
         # Call Gemini API to edit the image
         response = gemini_client.models.generate_content(
-            model="gemini-2.0-flash-exp-image-generation",
+            model="gemini-2.0-flash-preview-image-generation",
             contents=[prompt, image],
             config=types.GenerateContentConfig(
                 response_modalities=['TEXT', 'IMAGE']

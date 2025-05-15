@@ -326,7 +326,7 @@ def generate_commercial_summary(conversation, user_name):
     
     return summary
 
-def generate_product_introduction(appearance_summary, commercial_summary, appearance_conversation):
+def generate_product_introduction(appearance_summary, commercial_summary, appearance_conversation=None):
     """Generate final product introduction using LLM4"""
     # Create a new conversation for the introduction GPT
     intro_messages = [initialize_product_introduction_system()]

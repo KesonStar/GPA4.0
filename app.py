@@ -217,7 +217,7 @@ def chat():
             current_phase = 3
             
             # Generate product introduction
-            product_introduction = gpt_4_api.generate_product_introduction(appearance_summary, commercial_summary)
+            product_introduction = gpt_4_api.generate_product_introduction(appearance_summary, commercial_summary, appearance_conversation)
             
             # Save product introduction to session path
             introduction_file = gpt_4_api.save_introduction_to_markdown(product_introduction, session_save_path)

@@ -16,6 +16,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const productImage = document.getElementById('product-image');
     const imageLoading = document.getElementById('image-loading');
     const imageLoadingText = document.getElementById('image-loading-text');
+    const undoImageButton = document.getElementById('undo-image-button');
 
     // Add new DOM elements for 3D model viewer
     const modelViewerContainer = document.getElementById('model-viewer-container');
@@ -237,6 +238,7 @@ document.addEventListener('DOMContentLoaded', function () {
         // Show image loading indicator
         imageLoadingText.textContent = "Generating initial image...";
         imageLoading.style.display = 'flex';
+        if (productImage) productImage.classList.add('image-loading-effect');
 
         // Keep the main loading container visible during the entire process
         loadingText.textContent = "Generating initial image...";
@@ -263,6 +265,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     // Only hide loading indicators after successful image creation
                     loadingContainer.style.display = 'none';
                     imageLoading.style.display = 'none';
+                    if (productImage) productImage.classList.remove('image-loading-effect');
 
                     if (data.success) {
                         // Set the image source first
@@ -279,32 +282,40 @@ document.addEventListener('DOMContentLoaded', function () {
 
                         // Add system message to chat
                         addMessageToChat('assistant', 'Image has been created. You can now provide instructions to edit it, or type "image design finished" when you\'re done.', true);
+                        checkUndoButtonState();
                     } else {
                         // Show error message
-                        addMessageToChat('assistant', `Error creating image: ${data.message}`, true);
+                        addMessageToChat('assistant', data.message || "Failed to create image.");
                         // If creation failed, maybe hide the image viewer or show a placeholder?
                         // For now, just keep it hidden if it wasn't shown yet
                         imageViewerContainer.style.display = 'none';
+                        checkUndoButtonState();
                     }
                 })
                 .catch(error => {
-                    console.error('Error:', error);
-                    loadingContainer.style.display = 'none';
+                    console.error('Error creating image:', error);
+                    addMessageToChat('assistant', 'Error creating image.');
                     imageLoading.style.display = 'none';
-                    addMessageToChat('assistant', 'There was an error generating the image. Please try again.', true);
-                    // Keep viewer hidden on error
-                    imageViewerContainer.style.display = 'none';
+                    if (productImage) productImage.classList.remove('image-loading-effect');
+                    loadingContainer.style.display = 'none';
+                    checkUndoButtonState();
                 });
         }, 800);
     }
 
     // Function to edit the image
     function editImage(prompt) {
-        // Show image loading
+        if (!productImage.src || productImage.src.endsWith('#') || productImage.src === "") {
+            addMessageToChat('assistant', "There is no image to edit. Please create an image first using 'create image'.");
+            // Ensure loading indicators specific to image editing are hidden if they were shown by chat input logic
+            imageLoading.style.display = 'none';
+            return;
+        }
+
         imageLoadingText.textContent = "Editing image...";
         imageLoading.style.display = 'flex';
+        productImage.classList.add('image-loading-effect');
 
-        // Call API to edit image
         fetch('/edit-image', {
             method: 'POST',
             headers: {
@@ -318,6 +329,7 @@ document.addEventListener('DOMContentLoaded', function () {
             .then(data => {
                 // Hide image loading indicator
                 imageLoading.style.display = 'none';
+                if (productImage) productImage.classList.remove('image-loading-effect');
 
                 if (data.success) {
                     // Remove current image appear class
@@ -334,27 +346,32 @@ document.addEventListener('DOMContentLoaded', function () {
                     if (data.text_response) {
                         addMessageToChat('assistant', data.text_response, true);
                     } else {
-                        addMessageToChat('assistant', 'Image has been edited according to your instructions.', true);
+                        addMessageToChat('assistant', data.message || "Image edited.");
                     }
+                    checkUndoButtonState();
                 } else {
                     // Show error message
-                    addMessageToChat('assistant', `Error editing image: ${data.message}`, true);
+                    addMessageToChat('assistant', data.message || "Failed to edit image.");
+                    checkUndoButtonState();
                 }
             })
             .catch(error => {
-                console.error('Error:', error);
+                console.error('Error editing image:', error);
+                addMessageToChat('assistant', 'Error editing image.');
+                checkUndoButtonState();
+            })
+            .finally(() => {
                 imageLoading.style.display = 'none';
-                addMessageToChat('assistant', 'There was an error editing the image. Please try again.', true);
+                if (productImage) productImage.classList.remove('image-loading-effect');
             });
     }
 
     // Function to finalize the image
     function finalizeImage() {
-        // Show image loading
-        imageLoadingText.textContent = "Finalizing high resolution image...";
+        imageLoadingText.textContent = "Finalizing image with higher resolution...";
         imageLoading.style.display = 'flex';
+        productImage.classList.add('image-loading-effect');
 
-        // Call API to finalize image
         fetch('/finalize-image', {
             method: 'POST',
             headers: {
@@ -365,6 +382,7 @@ document.addEventListener('DOMContentLoaded', function () {
             .then(data => {
                 // Hide image loading indicator
                 imageLoading.style.display = 'none';
+                if (productImage) productImage.classList.remove('image-loading-effect');
 
                 if (data.success) {
                     // Remove current image appear class
@@ -374,30 +392,35 @@ document.addEventListener('DOMContentLoaded', function () {
                     void productImage.offsetWidth;
 
                     // Update image source and add animation
-                    productImage.src = data.image_path + '?' + new Date().getTime(); // Add timestamp to prevent caching
-                    productImage.classList.add('image-appear');
+                    productImage.src = data.image_path + '?t=' + new Date().getTime(); // Cache buster
+                    productImage.classList.remove('fade-out-fast');
+                    productImage.classList.add('fade-in-fast');
 
                     // Add system message to chat
-                    addMessageToChat('assistant', 'Final high-resolution image has been created. Your product design is now complete! Type "create model" to generate a 3D model of your product.', true);
+                    addMessageToChat('assistant', "Image finalized. Type 'create model' to generate the 3D model.");
 
                     // Show the model reminder
                     const modelReminder = document.getElementById('model-reminder');
                     if (modelReminder) {
                         modelReminder.style.display = 'block';
-                        // Auto-hide the reminder after 8 seconds
-                        setTimeout(() => {
-                            modelReminder.style.display = 'none';
-                        }, 3000);
+                        void modelReminder.offsetWidth; // Trigger reflow
+                        modelReminder.classList.add('fade-in');
                     }
+                    checkUndoButtonState();
                 } else {
                     // Show error message
-                    addMessageToChat('assistant', `Error finalizing image: ${data.message}`, true);
+                    addMessageToChat('assistant', data.message || "Failed to finalize image.");
+                    checkUndoButtonState();
                 }
             })
             .catch(error => {
-                console.error('Error:', error);
+                console.error('Error finalizing image:', error);
+                addMessageToChat('assistant', 'Error finalizing image.');
+                checkUndoButtonState();
+            })
+            .finally(() => {
                 imageLoading.style.display = 'none';
-                addMessageToChat('assistant', 'There was an error finalizing the image. Please try again.', true);
+                if (productImage) productImage.classList.remove('image-loading-effect');
             });
     }
 
@@ -651,27 +674,117 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function updatePhaseIndicator() {
-        switch (currentPhase) {
+        phaseLabel.textContent = `Phase ${currentPhase}: ${getPhaseName(currentPhase)}`;
+        // Also check undo button state when phase changes, as it's phase-dependent
+        checkUndoButtonState();
+    }
+
+    function getPhaseName(phase) {
+        switch (phase) {
             case 1:
-                phaseLabel.textContent = "Phase 1: Appearance Design";
-                break;
+                return "Appearance Design";
             case 2:
-                phaseLabel.textContent = "Phase 2: Commercial Application";
-                break;
+                return "Commercial Application";
             case 2.5:
-                phaseLabel.textContent = "Phase 2.5: Introduction Preparation";
-                break;
+                return "Introduction Preparation";
             case 3:
-                phaseLabel.textContent = "Phase 3: Product Introduction";
-                break;
+                return "Product Introduction";
             case 4:
-                phaseLabel.textContent = "Phase 4: Image Design";
-                break;
+                return "Image Design";
             case 5:
-                phaseLabel.textContent = "Phase 5: 3D Model Creation";
-                break;
+                return "3D Model Creation";
             default:
-                phaseLabel.textContent = "Product Design Assistant";
+                return "Product Design Assistant";
         }
+    }
+
+    // Function to handle undoing an image edit
+    function undoImageEdit() {
+        if (!imageViewerContainer.style.display || imageViewerContainer.style.display === 'none') {
+            console.warn("Undo clicked but image viewer is not visible.");
+            return;
+        }
+
+        imageLoadingText.textContent = "Reverting image...";
+        imageLoading.style.display = 'flex';
+        productImage.classList.add('image-loading-effect');
+
+        fetch('/undo-image-edit', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    if (data.image_path) {
+                        const newImageSrc = data.image_path + '?t=' + new Date().getTime(); // Cache buster
+                        productImage.src = newImageSrc;
+                        productImage.style.display = 'block';
+                        productImage.classList.remove('fade-out-fast');
+                        productImage.classList.add('fade-in-fast');
+                        addMessageToChat('assistant', data.message || 'Reverted to the previous image.');
+                    } else {
+                        // This means the last image was removed, and no previous one to show
+                        productImage.src = '';
+                        productImage.style.display = 'none';
+                        // Optionally hide the entire image viewer if no image is left
+                        // imageViewerContainer.style.display = 'none'; 
+                        // imageViewerContainer.classList.remove('fade-in');
+                        addMessageToChat('assistant', data.message || 'Last image removed. No image to display.');
+                    }
+                } else {
+                    addMessageToChat('assistant', data.message || 'Could not revert image.');
+                }
+            })
+            .catch(error => {
+                console.error('Error undoing image edit:', error);
+                addMessageToChat('assistant', 'An error occurred while trying to revert the image.');
+            })
+            .finally(() => {
+                imageLoading.style.display = 'none';
+                productImage.classList.remove('image-loading-effect');
+                checkUndoButtonState(); // Always check state after attempting undo
+            });
+    }
+
+    // Function to check and update the visibility of the undo button
+    function checkUndoButtonState() {
+        if (!undoImageButton) return; // Guard if button not found
+
+        if (currentPhase >= 5) { // Phase 5 is post-finalization (or model creation)
+            undoImageButton.style.display = 'none';
+            return;
+        }
+
+        if (!imageViewerContainer.style.display || imageViewerContainer.style.display === 'none' || !productImage.src || productImage.src.endsWith('#')) {
+            // Hide if image viewer not visible or no image loaded
+            undoImageButton.style.display = 'none';
+            return;
+        }
+
+        fetch('/get-image-history-status')
+            .then(response => response.json())
+            .then(data => {
+                if (data.can_undo) {
+                    undoImageButton.style.display = 'inline-block';
+                } else {
+                    undoImageButton.style.display = 'none';
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching image history status:', error);
+                undoImageButton.style.display = 'none'; // Default to hidden on error
+            });
+    }
+
+    // Initial check in case page loads into a state where image is already visible (e.g. refresh)
+    // This might be better tied to when the image viewer itself becomes visible.
+    // For now, let's ensure it's called when phase changes or specific image actions occur.
+
+    // Event listener for the undo button
+    if (undoImageButton) {
+        undoImageButton.addEventListener('click', undoImageEdit);
     }
 }); 

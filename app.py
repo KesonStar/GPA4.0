@@ -33,6 +33,11 @@ gemini_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY", "AIzaSyC_UzB4eX
 # Global variable to store the current image path
 current_image_path = None
 
+# List to store history of image filenames for the current session (for undo)
+# This will store just the filenames, not full paths.
+# The full path will be constructed using session_save_path + '/2d/' + filename
+# However, a simpler approach is to list files in the directory directly.
+
 class Project:
     def __init__(self, timestamp, thumbnail=None, model_filename=None):
         self.timestamp = timestamp
@@ -339,6 +344,7 @@ def create_image():
         # Save the image
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         image_filename = f"product_image_{timestamp}.png"
+        # current_image_path should store the full path for server-side operations
         current_image_path = os.path.join(image_dir, image_filename)
         
         with open(current_image_path, 'wb') as f:
@@ -348,7 +354,7 @@ def create_image():
         return jsonify({
             "success": True,
             "message": "Image created successfully",
-            "image_path": f"/get-image/{image_filename}"
+            "image_path": f"/get-image/{image_filename}" # Send only filename
         })
     
     except Exception as e:
@@ -399,6 +405,7 @@ def edit_image():
             image_dir = os.path.join(session_save_path, '2d')
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
             image_filename = f"product_image_edited_{timestamp}.png"
+            # current_image_path should store the full path
             current_image_path = os.path.join(image_dir, image_filename)
             
             with open(current_image_path, 'wb') as f:
@@ -408,7 +415,7 @@ def edit_image():
                 "success": True,
                 "message": "Image edited successfully",
                 "text_response": text_response or "Image edited based on your instructions.",
-                "image_path": f"/get-image/{image_filename}"
+                "image_path": f"/get-image/{image_filename}" # Send only filename
             })
         else:
             return jsonify({
@@ -445,18 +452,20 @@ def finalize_image():
         
         # Save the final image
         image_dir = os.path.join(session_save_path, '2d')
-        final_image_path = os.path.join(image_dir, "Product 2d Image.png")
+        final_image_path = os.path.join(image_dir, "Product 2d Image.png") # Standardized name for final image
         
+        # It's important to update current_image_path to the final image's path
+        # if further operations (like model creation) depend on it.
+        # However, for undo purposes, this finalized image is treated differently.
         with open(final_image_path, 'wb') as f:
             f.write(image_bytes)
         
-        # Update current image path
-        current_image_path = final_image_path
-        
+        # current_image_path = final_image_path # Optional: update if needed post-finalization
+
         return jsonify({
             "success": True,
-            "message": "Final high-resolution image created successfully",
-            "image_path": "/get-image/Product 2d Image.png"
+            "message": "Image finalized successfully",
+            "image_path": f"/get-image/Product 2d Image.png" # Send specific filename
         })
     
     except Exception as e:
@@ -468,15 +477,124 @@ def finalize_image():
 
 @app.route('/get-image/<filename>')
 def get_image(filename):
+    global session_save_path 
     if not session_save_path:
-        return "No active session", 400
+        app.logger.error("session_save_path not set in get_image")
+        return "Session not found", 404
     
-    image_path = os.path.join(session_save_path, '2d', filename)
+    # Sanitize filename to prevent directory traversal
+    filename = os.path.basename(filename)
     
-    if not os.path.exists(image_path):
+    image_path = os.path.join(session_save_path, '2d', filename) 
+    
+    if os.path.exists(image_path):
+        return send_file(image_path)
+    else:
+        # Fallback for non-session specific static images if any (though not used by create/edit image)
+        # static_path = os.path.join('static', 'uploads', filename) # This was original
+        # if os.path.exists(static_path):
+        #      return send_file(static_path)
+        app.logger.error(f"Image not found at {image_path}")
         return "Image not found", 404
+
+@app.route('/undo-image-edit', methods=['POST'])
+def undo_image_edit():
+    global session_save_path, current_image_path
     
-    return send_file(image_path, mimetype='image/png')
+    if not session_save_path:
+        return jsonify({"success": False, "message": "Session not found. Cannot undo."}), 400
+
+    image_dir = os.path.join(session_save_path, '2d')
+    if not os.path.isdir(image_dir):
+        return jsonify({"success": False, "message": "Image directory not found. Cannot undo."}), 400
+
+    # Get all .png images, excluding the finalized one
+    try:
+        image_files = [
+            f for f in os.listdir(image_dir) 
+            if f.endswith('.png') and f != "Product 2d Image.png"
+        ]
+    except FileNotFoundError:
+         return jsonify({"success": False, "message": "Image directory not found."}), 400
+
+
+    if not image_files:
+        return jsonify({"success": False, "message": "No images found to undo."}), 400
+
+    # Sort images by name (which includes timestamp) to get chronological order
+    image_files.sort()
+
+    if len(image_files) < 1: # Should be caught by "not image_files" but good for clarity
+        # This case implies no images or only the final image exists (which is excluded)
+        return jsonify({"success": False, "message": "No previous image version to revert to."}), 400
+    
+    if len(image_files) == 1:
+        # Only one (non-finalized) image exists. We can delete it, but there's no "previous" to show.
+        # The user request was: "delete the latest image" and "display the previous image".
+        # This implies an undo operation should result in a previous image being shown.
+        # So, if only one image is left (that can be undone), we cannot fulfill the "show previous" part.
+        image_to_delete_path = os.path.join(image_dir, image_files[0])
+        try:
+            os.remove(image_to_delete_path)
+            current_image_path = None # No current image after deleting the only one
+            return jsonify({
+                "success": True, 
+                "message": "Last image removed. No further images to display.",
+                "image_path": None # Signal to frontend to clear image
+            })
+        except OSError as e:
+            app.logger.error(f"Error deleting image {image_to_delete_path}: {e}")
+            return jsonify({"success": False, "message": f"Error deleting image: {str(e)}"}), 500
+
+    # More than one image exists, proceed with undo
+    image_to_delete_filename = image_files[-1]
+    image_to_delete_path = os.path.join(image_dir, image_to_delete_filename)
+    
+    previous_image_filename = image_files[-2]
+    previous_image_full_path = os.path.join(image_dir, previous_image_filename)
+
+    try:
+        os.remove(image_to_delete_path)
+        current_image_path = previous_image_full_path # Update current_image_path
+        return jsonify({
+            "success": True,
+            "image_path": f"/get-image/{previous_image_filename}",
+            "message": "Reverted to the previous image."
+        })
+    except OSError as e:
+        app.logger.error(f"Error deleting image {image_to_delete_path}: {e}")
+        return jsonify({"success": False, "message": f"Error deleting image: {str(e)}"}), 500
+
+@app.route('/get-image-history-status', methods=['GET'])
+def get_image_history_status():
+    global session_save_path
+    if not session_save_path:
+        return jsonify({"can_undo": False, "image_count": 0})
+
+    image_dir = os.path.join(session_save_path, '2d')
+    if not os.path.isdir(image_dir):
+        return jsonify({"can_undo": False, "image_count": 0})
+
+    try:
+        # Count non-finalized images
+        images = [
+            f for f in os.listdir(image_dir) 
+            if f.endswith('.png') and f != "Product 2d Image.png"
+        ]
+    except FileNotFoundError:
+        return jsonify({"can_undo": False, "image_count": 0})
+        
+    image_count = len(images)
+    # Can undo if there's more than one image that can be "undone".
+    # If there is 1 image, deleting it means no image to revert to.
+    # The request: "delete the latest image", "display the previous image".
+    # This means at least 2 images must be present for a "successful" undo that shows a previous state.
+    can_undo = image_count >= 1 
+    # If image_count is 1, undo will delete it and result in no image.
+    # If image_count is > 1, undo will delete the latest and show the one before it.
+    # The frontend will decide based on the returned image_path from /undo-image-edit.
+    # So, can_undo here means "is there at least one image that can be subject to an undo operation".
+    return jsonify({"can_undo": can_undo, "image_count": image_count})
 
 @app.route('/create-model', methods=['POST'])
 def create_model():

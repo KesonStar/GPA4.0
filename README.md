@@ -1,4 +1,4 @@
-# GPA4.0: *Vibe* Designing Agent
+# GPA4.0 (Gradual Prompt-to-3D Ascension for(4) M.V.P Design): *Vibe* Designing Agent
 
 An end-to-end, conversation-driven product-design studio powered by Generative AI. Start with a raw idea and walk away with a market-ready design package that includes appearance specifications, a commercial strategy, high-resolution 2-D renders and an interactable 3-D model.
 

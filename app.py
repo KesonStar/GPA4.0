@@ -28,7 +28,7 @@ session_save_path = None  # Add global variable for save path
 
 # Initialize API clients
 openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-gemini_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY", "AIzaSyC_UzB4eXWc03oYVqHW8lfURigw5xDAuGM"))
+gemini_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
 # Global variable to store the current image path
 current_image_path = None
